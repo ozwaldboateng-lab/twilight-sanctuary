@@ -31,6 +31,16 @@
      上書きしてしまうため、表示・非表示はクラスで切り替える。 */
   .view{display:none;}
   .view.on{display:block;}
+  /* 画面の切り替わりが一瞬すぎて場面転換に見えないので、短いフェードを挟む。
+     transform を使うのは .view 自身だけ（ダイアログは #machine 直下の別要素なので
+     position:fixed の基準がずれる心配はない） */
+  @keyframes viewIn{ from{opacity:0; transform:translateY(7px);} to{opacity:1; transform:none;} }
+  .view.on{animation:viewIn .22s ease-out both;}
+  /* 動きを控えたい設定の人には出さない */
+  @media (prefers-reduced-motion: reduce){
+    .view.on{animation:none;}
+    .hpbar i, .mpbar i{transition:none;}
+  }
   body{
     font-family:'Shippori Mincho',serif;
     color:var(--ink);
@@ -110,7 +120,7 @@
     body.landscape #battleView.on {
       display:grid;
       grid-template-columns: minmax(0, 1fr) 280px;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto auto auto 1fr;
       gap:8px 12px;
       align-items:start;
     }
@@ -118,28 +128,35 @@
     /* 戦闘盤は正方形（480x480）なので、横幅を「使える高さ」で頭打ちにすると
        画面内に収まり、盤を見るためのスクロールが要らなくなる */
     body.landscape #battleCanvasWrap {
-      grid-column:1; grid-row:2 / span 2; margin:0;
+      grid-column:1; grid-row:2 / span 3; margin:0;
       max-width:calc(100vh - 96px); justify-self:center;
     }
     body.landscape #battleCanvasWrap canvas {width:100%;height:auto;display:block;}
     body.landscape #battleView > .hint {
-      grid-column:2; grid-row:2;
+      grid-column:2; grid-row:3;
       font-size:11px; line-height:1.5; margin:0;
       padding:6px 8px;
     }
     body.landscape .battle-actions {
-      grid-column:2; grid-row:3;
+      grid-column:2; grid-row:4;
       flex-direction:column; gap:6px; align-self:start;
     }
     /* 横向きは縦積みになるので、5つ並んでも高さを食い過ぎないよう詰める */
     body.landscape .battle-actions button {width:100%;padding:7px 10px;font-size:13px;letter-spacing:1px;}
     body.landscape .battle-info {
       grid-column:1 / span 2;
-      grid-row:4;
+      grid-row:5;
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap:6px;
       font-size:11px;
     }
+    /* 敵のHPはサイドバー最上段（ヒントの上） */
+    body.landscape #battleFoes{
+      grid-column:2; grid-row:2; margin:0;
+      display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px;
+      font-size:10px;
+    }
+    body.landscape #battleFoes .unitcard{min-width:0;padding:4px 6px;line-height:1.4;}
     body.landscape .battle-info .card {padding:6px 8px;}
 
     /* 町画面：左右に建物リストと現在情報 */
@@ -251,7 +268,7 @@
   body.desktop #battleView.on{
     display:grid;
     grid-template-columns: minmax(0,1fr) 340px;
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-rows: auto auto auto auto 1fr;
     gap:10px 24px;
     align-items:start;
     max-width:calc(100vh - 190px + 364px);
@@ -259,28 +276,31 @@
   }
   body.desktop .battle-head{grid-column:1 / span 2; grid-row:1; margin-bottom:2px;}
   body.desktop #battleCanvasWrap{
-    grid-column:1; grid-row:2 / span 3; margin:0;
+    grid-column:1; grid-row:2 / span 4; margin:0;
     width:100%;
     /* 盤面は 480x480 の正方形なので、高さがそのまま幅の上限になる */
     max-width:calc(100vh - 190px);
   }
   body.desktop #battleCanvasWrap canvas{width:100%;height:auto;display:block;}
   body.desktop #battleView > .hint{
-    grid-column:2; grid-row:2; margin:0; font-size:13px; line-height:1.7; padding:10px 12px;
+    grid-column:2; grid-row:3; margin:0; font-size:13px; line-height:1.7; padding:10px 12px;
   }
   body.desktop .battle-actions{
-    grid-column:2; grid-row:3; margin:0;
+    grid-column:2; grid-row:4; margin:0;
     flex-direction:column; gap:8px;
   }
   body.desktop .battle-actions button{width:100%;padding:11px 12px;}
   body.desktop .battle-info{
-    grid-column:2; grid-row:4; margin:0;
+    grid-column:2; grid-row:5; margin:0;
     display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;
     align-content:start;
   }
+  /* 敵のHPは操作パネル（ヒント）の上 */
+  body.desktop #battleFoes{grid-column:2; grid-row:2; margin:0;}
   body.desktop .battle-info .unitcard{min-width:0;}
 
   /* ---- 町：左に施設、右に風景と所持金 ---- */
+  body.desktop .town-utils{grid-column:1; grid-row:5; margin:0;}
   body.desktop #townView.on{
     display:grid;
     grid-template-columns: 1fr 1fr;
@@ -298,6 +318,7 @@
   /* ---- 一覧が主役の画面：中央に寄せて読みやすい幅に ---- */
   body.desktop #shopView.on > *,
   body.desktop #tavernView.on > *,
+  body.desktop #helpView.on > *,
   body.desktop #partyView.on > *{max-width:900px;margin-left:auto;margin-right:auto;}
   body.desktop .shop-list{max-height:calc(100vh - 396px);}
   body.desktop .tavern-list{max-height:calc(100vh - 330px);}
@@ -410,6 +431,11 @@
     user-select:none;
   }
   button.key:active{transform:translateY(2px);box-shadow:0 0 0 #b3a888;background:#d0c4ad;}
+  @media (hover:hover){
+    button.key:hover:not(:disabled){background:linear-gradient(180deg,#f5f0e4,#ded3bd);}
+    .battle-actions button:hover:not(:disabled){background:linear-gradient(180deg,#f5f0e4,#ded3bd);}
+    .building:hover{background:linear-gradient(180deg,#f5f0e4,#ded3bd);}
+  }
   button.key.empty{visibility:hidden;}
   .log{
     margin-top:12px;background:rgba(232,226,212,.55);
@@ -417,6 +443,27 @@
     border-radius:3px;padding:10px 12px;font-size:13px;
     min-height:44px;color:var(--ink-soft);line-height:1.7;
   }
+
+  /* ---------- 遊び方 ---------- */
+  .help-body{
+    background:rgba(232,226,212,.5);border:1px solid var(--paper-edge);border-radius:3px;
+    padding:14px 16px;font-size:13px;line-height:1.9;color:var(--ink-soft);
+    max-height:calc(100vh - 260px);overflow-y:auto;
+  }
+  .help-body h3{
+    font-size:14px;color:var(--wine);letter-spacing:3px;font-weight:700;
+    margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid rgba(120,108,80,.3);
+  }
+  .help-body h3:first-child{margin-top:0;}
+  .help-body p{margin:0 0 6px;}
+  .help-body b{color:#3c3424;}
+  .help-keys{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:12px;}
+  .help-keys td{padding:4px 8px;border-bottom:1px solid rgba(120,108,80,.18);vertical-align:top;}
+  .help-keys td:first-child{width:5.5em;color:#8a7d5e;white-space:nowrap;}
+  .hl-move{color:#4a6f9a;font-weight:700;}
+  .hl-atk{color:#9a4a4a;font-weight:700;}
+  .town-utils{display:flex;gap:8px;margin-top:8px;}
+  .town-utils button{flex:1;font-size:12px;padding:9px 0;letter-spacing:2px;}
 
   /* ---------- 戦闘 ---------- */
   .battle-head{
@@ -427,25 +474,41 @@
   .battle-info{
     display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;font-size:12px;
   }
+  /* 敵のHPは盤面の上。味方より先に目に入る位置に置く */
+  #battleFoes{margin-top:0;margin-bottom:10px;}
+  #battleFoes:empty{display:none;}
   .unitcard{
-    flex:1;min-width:100px;background:rgba(232,226,212,.62);
+    flex:1;min-width:104px;background:rgba(232,226,212,.62);
     border:1px solid var(--paper-edge);border-left:3px solid var(--dusk);
-    border-radius:3px;padding:7px 10px;line-height:1.6;
+    border-radius:3px;padding:6px 9px;line-height:1.45;
   }
   .unitcard.foe{border-left-color:var(--wine);}
-  .unitcard .nm{color:#3c3424;font-weight:700;}
-  .unitcard .sub{color:#8a7d5e;font-size:11px;}
-  .hpbar{height:5px;background:#cabf9e;border-radius:3px;margin-top:4px;overflow:hidden;}
-  .hpbar i{display:block;height:100%;background:var(--heal);}
+  .unitcard.down{opacity:.5;}
+  .unitcard .nm{
+    color:#3c3424;font-weight:700;font-size:13px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  /* 数値は折り返さない。「HP 70/70　MP」で改行されると読めない */
+  .unitcard .sub{
+    color:#8a7d5e;font-size:11px;letter-spacing:0;
+    display:flex;justify-content:space-between;gap:6px;white-space:nowrap;
+  }
+  .unitcard .sub .mp{color:#5d6b7a;}
+  .hpbar{height:5px;background:#cabf9e;border-radius:3px;margin-top:3px;overflow:hidden;}
+  .hpbar i{display:block;height:100%;background:var(--heal);transition:width .25s ease;}
   .unitcard.foe .hpbar i{background:var(--wine);}
+  .mpbar{height:3px;background:#c6c0ac;border-radius:2px;margin-top:2px;overflow:hidden;}
+  .mpbar i{display:block;height:100%;background:var(--dusk);transition:width .25s ease;}
   .battle-actions{
-    display:flex;gap:10px;margin-top:12px;justify-content:center;flex-wrap:wrap;
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;margin-top:12px;
   }
   .battle-actions button{
     font-family:'Shippori Mincho',serif;font-size:14px;color:#3c3424;
     background:linear-gradient(180deg,#efe9db,#d8cdb6);
-    border:1px solid var(--paper-edge);border-radius:4px;padding:11px 20px;cursor:pointer;
-    letter-spacing:2px;box-shadow:0 2px 0 #b3a888, inset 0 1px 0 rgba(255,255,255,.5);
+    border:1px solid var(--paper-edge);border-radius:4px;padding:11px 8px;cursor:pointer;
+    letter-spacing:1px;box-shadow:0 2px 0 #b3a888, inset 0 1px 0 rgba(255,255,255,.5);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
   .battle-actions button:active{transform:translateY(2px);box-shadow:0 0 0 #b3a888;}
   .battle-actions button:disabled{opacity:.4;cursor:default;}
@@ -727,8 +790,10 @@
       <div class="title-buttons">
         <button class="key title-btn" id="bTitleNew">新しく始める</button>
         <button class="key title-btn" id="bTitleContinue">続きから</button>
+        <button class="key title-btn" id="bTitleHelp">遊び方</button>
+        <button class="key title-btn" id="bTitleSound">音：オン</button>
       </div>
-      <div class="title-foot">RUISARD CODEX · prototype</div>
+      <div class="title-foot">RUISARD CODEX · ver 1.0</div>
     </div>
   </div>
 
@@ -768,6 +833,7 @@
         <div><span class="k">方位</span> <span class="compass" id="dir">北</span></div>
         <div><span class="k">歩数</span> <span class="v" id="steps">0</span></div>
         <div><span class="k">隊列HP</span> <span class="v" id="partyHp">--</span></div>
+        <div><span class="k">魔力</span> <span class="v" id="partyMp">--</span></div>
         <div><span class="k">所持金</span> <span class="v" id="gold" style="color:#b08d3e;">0 G</span></div>
       </div>
       <div class="minimap-box">
@@ -825,6 +891,10 @@
       </button>
     </div>
     <div class="town-gold">所持金 <span id="townGold">0</span> G</div>
+    <div class="town-utils">
+      <button class="key" id="bTownHelp">遊び方</button>
+      <button class="key" id="bTownSound">音：オン</button>
+    </div>
     <div style="text-align:center;margin-top:8px;">
       <button class="key" id="bTownToDungeon" style="max-width:240px;display:inline-block;width:100%;">迷宮へ降りる</button>
     </div>
@@ -864,6 +934,55 @@
     <div class="log" id="tavernLog" style="margin-top:10px;">薄暗い酒場。火と杯と、いくつかの話し声。</div>
   </div>
 
+  <!-- ============ 遊び方 ============ -->
+  <div id="helpView" class="view">
+    <div class="town-head">
+      <div class="town-title">遊び方</div>
+      <div class="town-sub">黄昏の聖域を歩くために</div>
+    </div>
+    <div class="help-body">
+      <h3>目的</h3>
+      <p>聖域の地下、六つの階層をくだり、最奥に眠る<b>黄昏の古竜</b>を討つ。<br>
+         各階の下り階段は<b>番人</b>が塞いでいる。倒さなければ先へは進めない。</p>
+
+      <h3>探索</h3>
+      <p>迷宮では前進・後退と左右の方向転換で歩く。歩いていると霧の生き物に出くわす。<br>
+         地図は歩いた場所だけが記される。<b>階段</b>で階層を移動し、B1 の上り階段から町へ戻れる。</p>
+      <table class="help-keys">
+        <tr><td>PC</td><td>↑↓←→ または W A S D</td></tr>
+        <tr><td>スマホ</td><td>画面下の方向ボタン</td></tr>
+      </table>
+
+      <h3>戦闘</h3>
+      <p>自分の駒を選ぶと、<span class="hl-move">青のマス</span>が移動先、<span class="hl-atk">赤の敵</span>が攻撃できる相手。<br>
+         全員が行動すると敵の番になる。1ターンに1体ずつ、移動と攻撃を選んでいく。</p>
+      <table class="help-keys">
+        <tr><td>魔法</td><td>撃つたびに<b>魔力</b>を消費する。宿屋で眠るか、魔力の雫で戻る</td></tr>
+        <tr><td>道具</td><td>選んだ駒の行動を使って、傷薬などを使う</td></tr>
+        <tr><td>逃げる</td><td>通常の戦いなら七割で成功。番人と古竜からは逃げられない</td></tr>
+        <tr><td>PC操作</td><td>矢印でカーソル移動／Enter で決定／Tab で味方切替／q・e・r＝待機・行動終了・魔法</td></tr>
+      </table>
+
+      <h3>町</h3>
+      <table class="help-keys">
+        <tr><td>宿屋</td><td>HP と魔力を回復する</td></tr>
+        <tr><td>教会</td><td>倒れた者を蘇らせる。<b>旅の記録（セーブ）</b>もここで行う</td></tr>
+        <tr><td>武器屋</td><td>武器・防具と、傷薬などの道具を売買する</td></tr>
+        <tr><td>酒場</td><td>Lv5 以上で同行者を雇える。連れて行けるのは一人まで</td></tr>
+      </table>
+
+      <h3>記録と全滅</h3>
+      <p>全滅すると、<b>最後に記録した時点</b>まで巻き戻る。階層を移動したときにも自動で記録されるが、
+         深くもぐる前には教会へ寄っておくとよい。</p>
+
+      <h3>覚醒</h3>
+      <p>Lv20 を越えた者は、教会で上位の職に<b>覚醒</b>できる。より強い魔法と力を得る。</p>
+    </div>
+    <div style="text-align:center;margin-top:16px;">
+      <button class="key" id="bHelpBack" style="max-width:240px;display:inline-block;width:100%;">戻る</button>
+    </div>
+  </div>
+
   <!-- ============ 確認ダイアログ ============ -->
   <div id="confirmDialog" class="confirm-wrap" style="display:none;">
     <div class="confirm-box">
@@ -889,6 +1008,7 @@
   <!-- ============ BATTLE ============ -->
   <div id="battleView" class="view">
     <div class="battle-head" id="battleHead">― 戦闘 ―</div>
+    <div class="battle-info" id="battleFoes"></div>
     <div class="crt" id="battleCanvasWrap">
       <canvas id="battle" width="480" height="480"></canvas>
       <div class="overlay" id="overlay">
@@ -908,7 +1028,7 @@
     <div class="battle-info" id="battleInfo"></div>
   </div>
 
-  <div class="foot">RUISARD CODEX · ↑↓←→ / WASD でも操作可 · prototype</div>
+  <div class="foot">RUISARD CODEX · ver 1.0</div>
 </div>
 
 <script>
@@ -967,7 +1087,19 @@ document.addEventListener('touchstart', _primeAudio, true);
 document.addEventListener('mousedown', _primeAudio, true);
 document.addEventListener('keydown', _primeAudio, true);
 // 単音：周波数fから周波数f2へ、duration秒、波形type、音量vol、減衰expDecay
+/* 音のオン・オフ。ブラウザに覚えさせる（Webのゲームで音を切れないのは致命的） */
+const SOUND_KEY='twilight_sound';
+let soundOn=true;
+try{ soundOn = localStorage.getItem(SOUND_KEY)!=='off'; }catch(e){}
+function setSound(on){
+  soundOn=!!on;
+  try{ localStorage.setItem(SOUND_KEY, soundOn?'on':'off'); }catch(e){}
+  const label='音：'+(soundOn?'オン':'オフ');
+  ['bTitleSound','bTownSound'].forEach(id=>{ const b=document.getElementById(id); if(b) b.textContent=label; });
+}
+
 function tone({f=440, f2=null, dur=0.18, type='sine', vol=0.18, attack=0.005, decay=null}={}){
+  if(!soundOn) return;
   const ctx=ac(); if(!ctx) return;
   const t=ctx.currentTime;
   const osc=ctx.createOscillator();
@@ -983,6 +1115,7 @@ function tone({f=440, f2=null, dur=0.18, type='sine', vol=0.18, attack=0.005, de
 }
 // ノイズ（短い）：揺れる風や打撃の質感に
 function noise({dur=0.12, vol=0.10, hpf=400, lpf=4000}={}){
+  if(!soundOn) return;
   const ctx=ac(); if(!ctx) return;
   const t=ctx.currentTime;
   const buf=ctx.createBuffer(1, Math.floor(ctx.sampleRate*dur), ctx.sampleRate);
@@ -1038,10 +1171,10 @@ const SFX={
 /* ===== ダンジョン（3階層・固定設計） =====
    記号: # 壁 / . 通路 / > 下り階段 / < 上り階段 / * 魔法陣（ボス） */
 const FLOOR_SRC=[
-  // B1：広めで易しい。右下に下り階段。(2,1)はテスト用ワープ→B3魔法陣の隣
+  // B1：広めで易しい。左上に上り階段（町へ）、右下に下り階段。
   [
     "##############",
-    "#<~..#.......#",
+    "#<...#.......#",
     "#.##.#.#####.#",
     "#.#..#.#...#.#",
     "#.#.##.#.#.#.#",
@@ -1050,14 +1183,14 @@ const FLOOR_SRC=[
     "#...#.#....#.#",
     "#.###.#.##.#.#",
     "#.....#.#..#.#",
-    "#.###.#.##.#.#",
-    "#.#.......#>.#",
+    "#.###.#.##$#.#",
+    "#.#$.....$#>.#",
     "##############",
   ],
   // B2：入り組む。左上に上り階段、右下に下り階段。
   [
     "##############",
-    "#<...#....#..#",
+    "#<...#....#.$#",
     "##.#.#.##.#.##",
     "#..#...#..#..#",
     "#.####.#.###.#",
@@ -1067,17 +1200,17 @@ const FLOOR_SRC=[
     "#.#.######.#.#",
     "#.#......#.#.#",
     "#.######.#.#.#",
-    "#......#...>.#",
+    "#.....$#...>.#",
     "##############",
   ],
   // B3：迷路状、左上に上り、右下に下り。
   [
     "##############",
-    "#<..#.....#..#",
+    "#<..#.....#.$#",
     "#.#.#.###.#.##",
-    "#.#...#...#..#",
+    "#.#...#...#.$#",
     "#.#####.###.##",
-    "#.....#.#....#",
+    "#.....#.#$...#",
     "###.#.#.####.#",
     "#...#.#....#.#",
     "#.###.####.#.#",
@@ -1091,7 +1224,7 @@ const FLOOR_SRC=[
     "##############",
     "#<..........##",
     "#.####.####..#",
-    "#....#.#...#.#",
+    "#...$#.#...#.#",
     "###.##.#.#.#.#",
     "#...#..#.#...#",
     "#.###.##.#.###",
@@ -1099,7 +1232,7 @@ const FLOOR_SRC=[
     "###.#.#.####.#",
     "#...#.#.#....#",
     "#.###.#.#.####",
-    "#.....#.#..>.#",
+    "#.....#$#..>$#",
     "##############",
   ],
   // B5：複雑、強敵の領域
@@ -1107,15 +1240,15 @@ const FLOOR_SRC=[
     "##############",
     "#<.#.....#...#",
     "#..#.###.#.#.#",
-    "##.#.#.#.#.#.#",
+    "##.#.#$#.#.#.#",
     "#..#.#.#.#.#.#",
     "#.##.#.#...#.#",
     "#....#.#####.#",
     "###.##.......#",
-    "#...#.######.#",
+    "#...#$######.#",
     "#.#.#.#......#",
     "#.#.#.#.####.#",
-    "#.#.....#..>.#",
+    "#.#.....#$.>.#",
     "##############",
   ],
   // B6：最深部、最奥に魔法陣（古竜）
@@ -1131,7 +1264,7 @@ const FLOOR_SRC=[
     "######.#####.#",
     "#......#.....#",
     "#.######.###.#",
-    "#*.........#.#",
+    "#*........$#$#",
     "##############",
   ],
 ];
@@ -1139,6 +1272,7 @@ const FLOOR_SRC=[
 // 文字列フロアを {grid, stairsDown, stairsUp, altar, start} に変換
 function buildFloor(src){
   const grid=[]; let stairsDown=null, stairsUp=null, altar=null;
+  const chests=[];  // この床の宝箱の位置
   const warps=[];   // この床にあるワープ位置（{x,y}の配列）。飛び先はFLOOR_WARP_LINKSで指定
   src.forEach((row,y)=>{
     const line=[];
@@ -1150,20 +1284,20 @@ function buildFloor(src){
         else if(c==='<') stairsUp={x,y};
         else if(c==='*') altar={x,y};
         else if(c==='~') warps.push({x,y});
+        else if(c==='$'){ chests.push({x,y}); }
       }
     }
     grid.push(line);
   });
-  return {grid, stairsDown, stairsUp, altar, warps,
+  return {chests, opened:chests.map(()=>false), grid, stairsDown, stairsUp, altar, warps,
           visited: grid.map(row=>row.map(()=>false))};
 }
 const FLOORS=FLOOR_SRC.map(buildFloor);
 
 // ワープの飛び先テーブル：from "floorIndex:x,y" → {floor, x, y, label}
 // 各フロアの warps[] と座標が一致するエントリを設定する
-const WARP_LINKS={
-  '0:2,1': {floor:5, x:2, y:11, label:'最奥の祭壇前'},   // B1(2,1) → B6(2,11) ※魔法陣(1,11)の隣
-};
+// 階層間のワープ（現状は未使用。マップに '~' を置き、ここに飛び先を書けば有効になる）
+const WARP_LINKS={};
 
 let floorIndex=0;                 // 現在の階層（0=B1）
 let MAP=FLOORS[floorIndex].grid;  // 現在のマップ（既存コードがMAPを参照）
@@ -1215,6 +1349,14 @@ function drawMinimap(){
     }
   }
   // 現在地（向き付きの三角）
+  // 未開封の宝箱（踏んだ場所の周囲が見えていれば）
+  if(f.chests){
+    f.chests.forEach((c,i)=>{
+      if(f.opened[i] || !f.visited[c.y][c.x]) return;
+      mmctx.fillStyle='#d8ae4a';
+      mmctx.fillRect(ox+c.x*cell+cell*0.28, oy+c.y*cell+cell*0.28, cell*0.44, cell*0.44);
+    });
+  }
   const cx=ox+player.x*cell+cell/2, cy=oy+player.y*cell+cell/2;
   const fwd=DIRS[player.dir];
   mmctx.fillStyle='#ffcf4a';
@@ -1229,6 +1371,9 @@ function drawMinimap(){
 }
 
 // 階層を切り替える（dir:+1で下り, -1で上り）
+// 節目で自動的に記録する。教会だけが頼りだと、全滅の巻き戻しが大きすぎる
+function autoSave(){ try{ saveGame(); }catch(e){} }
+
 function changeFloor(delta){
   const ni=floorIndex+delta;
   if(ni<0 || ni>=FLOORS.length) return;
@@ -1239,6 +1384,8 @@ function changeFloor(delta){
   const f=FLOORS[floorIndex];
   const arrive = delta>0 ? f.stairsUp : f.stairsDown;
   if(arrive){ player.x=arrive.x; player.y=arrive.y; }
+  markVisited();
+  autoSave();          // 階層をまたいだ時点を自動で記録
 }
 
 /* ===== 装備データベース =====
@@ -1333,30 +1480,59 @@ function freshParty(){
   return [
     {name:'ガザール', cls:'賢者', sprite:'sage', level:1, exp:0,
      base:{hp:34, atk:9, def:4, mov:3, rng:1}, spellBase:{name:'業火', type:'damage', pow:14, radius:4},
-     equip:{weapon:'staff_oak', armor:'cloak_old'}, hp:34},
+     equip:{weapon:'staff_oak', armor:'cloak_old'}, hp:34, mp:14},
     {name:'戦士レン', cls:'戦士', sprite:'warrior', level:1, exp:0,
      base:{hp:46, atk:11, def:7, mov:3, rng:1},
-     equip:{weapon:'sword_rust', armor:'armor_leather'}, hp:46},
+     equip:{weapon:'sword_rust', armor:'armor_leather'}, hp:46, mp:0},
     {name:'僧侶ミラ', cls:'僧侶', sprite:'priest', level:1, exp:0,
      base:{hp:30, atk:7, def:5, mov:4, rng:1}, spellBase:{name:'癒し', type:'heal', pow:18, radius:3},
-     equip:{weapon:'rod_pilgrim', armor:'cloak_old'}, hp:30},
+     equip:{weapon:'rod_pilgrim', armor:'cloak_old'}, hp:30, mp:14},
   ];
 }
 let party = freshParty();
 
+/* ===== 魔力（MP） =====
+   魔法を撃ち放題だと戦闘に選択が生まれないので、消費資源を持たせる。
+   回復は宿屋・レベルアップ・道具（魔力の雫）のみ。 */
+const SPELL_COST={
+  '業火':6, '業火嵐':14, '黄昏の業火':30,
+  '癒し':6, '祝祷':14, '神の癒し':32,
+  '火遁の術':8,
+};
+// 職業ごとの初期MPと1レベルあたりの伸び
+const MP_TABLE={
+  '賢者'  :{base:16, per:2}, '大賢者':{base:26, per:3},
+  '僧侶'  :{base:16, per:2}, '聖女'  :{base:26, per:3},
+  '忍者'  :{base:12, per:2},
+  '戦士'  :{base:0,  per:0}, '剣聖':{base:0, per:0},
+  '狩人'  :{base:0,  per:0}, '盗賊':{base:0, per:0}, '侍':{base:0, per:0},
+};
+function mpMax(member){
+  const t=MP_TABLE[member.cls];
+  if(!t || !member.spellBase) return 0;
+  return t.base + t.per*(member.level-1);
+}
+// 現在MPを上限内に収める。レベルアップや装備変更のあとに呼ぶ
+function clampMp(member){
+  const max=mpMax(member);
+  if(member.mp===undefined || member.mp===null) member.mp=max;
+  member.mp=Math.max(0, Math.min(max, member.mp));
+  return member.mp;
+}
+
 /* ===== 成長 ===== */
 // 職業ごとの1レベルあたりの伸び（base加算 + 魔力spellPow）
 const GROWTH={
-  '戦士': {hp:7, atk:2, def:2, spellPow:0},
-  '賢者': {hp:4, atk:1, def:1, spellPow:3},
+  '戦士': {hp:7, atk:2, def:1, spellPow:0},
+  '賢者': {hp:4, atk:1, def:0, spellPow:3},
   '僧侶': {hp:5, atk:1, def:1, spellPow:3},
-  '剣聖': {hp:9, atk:3, def:3, spellPow:0},
+  '剣聖': {hp:9, atk:3, def:2, spellPow:0},
   '大賢者': {hp:6, atk:1, def:1, spellPow:5},
   '聖女': {hp:7, atk:1, def:1, spellPow:5},
   '狩人': {hp:5, atk:2, def:1, spellPow:0},
-  '盗賊': {hp:4, atk:3, def:1, spellPow:0},
+  '盗賊': {hp:4, atk:3, def:0, spellPow:0},
   '忍者': {hp:5, atk:3, def:1, spellPow:3},
-  '侍':   {hp:8, atk:3, def:3, spellPow:0},
+  '侍':   {hp:8, atk:3, def:2, spellPow:0},
 };
 // クラスチェンジの定義：現クラス→次クラス、料金（Lv×倍率）
 const CLASS_UP={
@@ -1427,11 +1603,12 @@ const ITEMS={
   herb:    {name:'傷薬',       price:40,  type:'heal',      pow:30, desc:'HP を 30 回復する'},
   elixir:  {name:'霊薬',       price:150, type:'heal',      pow:90, desc:'HP を 90 回復する'},
   dew:     {name:'聖泉の雫',   price:320, type:'heal_full',         desc:'HP を全回復する'},
+  ether:   {name:'魔力の雫',   price:180, type:'mp',        pow:30, desc:'魔力を 30 回復する'},
   feather: {name:'蘇生の羽',   price:500, type:'revive',            desc:'倒れた者を半分の HP で戻す'},
   smoke:   {name:'煙玉',       price:120, type:'escape',            desc:'戦闘から必ず逃げられる'},
 };
 // 店に並べる順（ITEMS のキー順に依存させない）
-const ITEM_SHOP_ORDER=['herb','elixir','dew','feather','smoke'];
+const ITEM_SHOP_ORDER=['herb','elixir','dew','ether','feather','smoke'];
 
 // 所持品キーから表示名を引く。装備・道具・キーアイテムのいずれでも解決できる。
 function itemName(key){
@@ -1467,6 +1644,7 @@ function gainExp(member, amount){
   while(member.exp >= expToNext(member.level)){
     member.exp -= expToNext(member.level);
     member.level++;
+    member.mp = mpMax(member);   // レベルアップで魔力も満ちる
     const g=GROWTH[member.cls];
     member.base.hp  += g.hp;
     member.base.atk += g.atk;
@@ -1573,10 +1751,12 @@ function effStats(member){
     if(e.slayMult && e.slayMult>slayMult) slayMult=e.slayMult;
   });
   s.slayMult=slayMult;
+  s.maxmp = mpMax(member);
   // 通常魔法
   if(member.spellBase){
     s.spell={name:member.spellBase.name, type:member.spellBase.type,
-             pow:member.spellBase.pow+spellPow, radius:member.spellBase.radius+spellRadius};
+             pow:member.spellBase.pow+spellPow, radius:member.spellBase.radius+spellRadius,
+             cost:SPELL_COST[member.spellBase.name] || 4};
   }
   // 使える魔法の配列（通常＋習得済みの上位魔法）
   s.spells=[];
@@ -1585,13 +1765,15 @@ function effStats(member){
   if(member.level>=4 && (member.cls==='賢者'||member.cls==='大賢者') && member.spellBase){
     s.spells.push({
       name:'業火嵐', type:'damage_all',
-      pow:Math.round((member.spellBase.pow+spellPow)*0.72)
+      pow:Math.round((member.spellBase.pow+spellPow)*0.72),
+      cost:SPELL_COST['業火嵐']
     });
   }
   if(member.level>=4 && (member.cls==='僧侶'||member.cls==='聖女') && member.spellBase){
     s.spells.push({
       name:'祝祷', type:'heal_all',
-      pow:Math.round((member.spellBase.pow+spellPow)*0.72)
+      pow:Math.round((member.spellBase.pow+spellPow)*0.72),
+      cost:SPELL_COST['祝祷']
     });
   }
   // === 上位職限定の最強魔法 ===
@@ -1600,12 +1782,14 @@ function effStats(member){
       name:'黄昏の業火', type:'damage',
       pow:Math.round((member.spellBase.pow+spellPow)*2.0),
       radius:6,
-      slayMult:1.5    // ドラゴンに1.5倍
+      slayMult:1.5,   // ドラゴンに1.5倍
+      cost:SPELL_COST['黄昏の業火']
     });
   }
   if(member.cls==='聖女' && member.level>=22 && member.spellBase){
     s.spells.push({
-      name:'神の癒し', type:'heal_full'     // 全味方を全快
+      name:'神の癒し', type:'heal_full',    // 全味方を全快
+      cost:SPELL_COST['神の癒し']
     });
   }
   // === 剣聖はクリティカル ===
@@ -1617,6 +1801,7 @@ const elPos=document.getElementById('floor');
 const elDir=document.getElementById('dir');
 const elSteps=document.getElementById('steps');
 const elPartyHp=document.getElementById('partyHp');
+const elPartyMp=document.getElementById('partyMp');
 const elExploreLog=document.getElementById('exploreLog');
 
 /* ---------- 擬似3D ダンジョン描画 ---------- */
@@ -1814,39 +1999,18 @@ function paintCeilCell (zN,zF,seed){ paintPlaneY( CEIL_H,-HALF_W,HALF_W,zN,zF,CE
 function paintSideCell (zN,zF,side,seed){ paintPlaneX(side*HALF_W, zN, zF, seed); }
 function paintFrontWall(z,seed){ paintPlaneZ(z, -HALF_W, HALF_W, seed); }
 
-/* ---- 横穴（側方が通路のとき） ----
-   開口部は「窓」。その向こうに脇道の突き当り・床・天井・袖壁が見える。
-   窓の四角形でクリップしてから中身を描くと、覗き込んだ形になる。 */
-function paintOpening(zN, zF, side, cx, cy, sdx, sdy, fdx, fdy, seed){
-  const xIn = side*HALF_W;         // 通路と脇道の境（＝窓の位置）
-  const xOut= side*(HALF_W+1);     // 脇道の向こう側
-  dctx.save();
-  dctx.beginPath();
-  dctx.moveTo(projX(xIn,zN), projY( CEIL_H,zN));
-  dctx.lineTo(projX(xIn,zF), projY( CEIL_H,zF));
-  dctx.lineTo(projX(xIn,zF), projY(-FLOOR_H,zF));
-  dctx.lineTo(projX(xIn,zN), projY(-FLOOR_H,zN));
-  dctx.closePath();
-  dctx.clip();
+/* ---- 見えているマスを2次元で拾って描く ----
+   以前は「前方一直線の廊下＋横1マス」しか描いていなかったため、
+   脇道がL字に折れていると、その先が平らな暗い板になっていた。
+   周囲のマスを距離順に並べ、奥から手前へ塗れば、曲がった脇道も自然に映る。 */
+const LAT_RANGE=4;    // 左右に見るマス数
 
-  // 脇道がさらに先へ続く場合の下地（灯りが届かない奥）
-  dctx.fillStyle=shade([72,80,81], dist(xOut,(zN+zF)/2), 0.85);
-  dctx.fill();
-
-  if(isWall(cx+sdx*2, cy+sdy*2)) paintPlaneX(xOut, zN, zF, seed^0x4c);  // 脇道の突き当り
-  paintPlaneY(-FLOOR_H, xIn, xOut, zN, zF, FLOOR_BASE, seed^0x2a, 'floor');
-  paintPlaneY( CEIL_H,  xIn, xOut, zN, zF, CEIL_BASE,  seed^0x3b, 'ceil');
-  // 開口部の袖壁（斜め前後が壁なら、その面がこちらを向いている）
-  if(isWall(cx+sdx+fdx, cy+sdy+fdy)) paintPlaneZ(zF, xIn, xOut, seed^0x6e);
-  if(isWall(cx+sdx-fdx, cy+sdy-fdy)) paintPlaneZ(zN, xIn, xOut, seed^0x5d);
-  dctx.restore();
-
-  // 窓枠（手前側の柱）
-  dctx.strokeStyle=jointStyle(dist(xIn,zN),0.7); dctx.lineWidth=1.4;
-  dctx.beginPath();
-  dctx.moveTo(projX(xIn,zN), projY( CEIL_H,zN));
-  dctx.lineTo(projX(xIn,zN), projY(-FLOOR_H,zN));
-  dctx.stroke();
+// そのマスが画角に入っているか（ざっくり判定。外れたものは描かない）
+function cellInView(lat, k){
+  const zN=Math.max(ZMIN, k-0.5), zF=k+0.5;
+  const l=Math.min(projX(lat-0.5,zN), projX(lat-0.5,zF), projX(lat+0.5,zN), projX(lat+0.5,zF));
+  const r=Math.max(projX(lat-0.5,zN), projX(lat-0.5,zF), projX(lat+0.5,zN), projX(lat+0.5,zF));
+  return r>-8 && l<DW+8;
 }
 
 function drawDungeon(){
@@ -1861,30 +2025,37 @@ function drawDungeon(){
   dctx.fillStyle=g; dctx.fillRect(0,horizon,DW,DH-horizon);
 
   const fwd=DIRS[player.dir];
-  const left ={dx:DIRS[(player.dir+3)%4].dx, dy:DIRS[(player.dir+3)%4].dy};
-  const right={dx:DIRS[(player.dir+1)%4].dx, dy:DIRS[(player.dir+1)%4].dy};
+  const rgt=DIRS[(player.dir+1)%4];
+  // 盤面座標 → (前方k, 右lat) のマス
+  const cellOf=(lat,k)=>({x:player.x+fwd.dx*k+rgt.dx*lat, y:player.y+fwd.dy*k+rgt.dy*lat});
+  const wallAt=(lat,k)=>{ const c=cellOf(lat,k); return isWall(c.x,c.y); };
 
-  let blockedAt=MAXD;
-  for(let k=1;k<=MAXD;k++){
-    if(isWall(player.x+fwd.dx*k, player.y+fwd.dy*k)){ blockedAt=k; break; }
-  }
-
-  // 奥から手前へ塗る（画家のアルゴリズム）
-  for(let k=blockedAt;k>=0;k--){
-    const cx=player.x+fwd.dx*k, cy=player.y+fwd.dy*k;
-    const zN=Math.max(ZMIN, k-0.5), zF=k+0.5;
-    const seed=Math.round((cx*73856093)^(cy*19349663)^(k*83492791));
-    if(k>=1 && isWall(cx,cy)){
-      paintFrontWall(zN, seed);      // このマスは壁。手前側の面だけ見える
-      continue;
+  // 描く候補を集め、遠い順に並べる（画家のアルゴリズム）
+  const list=[];
+  for(let k=0;k<=MAXD;k++){
+    for(let lat=-LAT_RANGE;lat<=LAT_RANGE;lat++){
+      if(!cellInView(lat,k)) continue;
+      list.push({lat,k,d:lat*lat+k*k});
     }
-    paintCeilCell(zN, zF, seed);
-    paintFloorCell(zN, zF, seed);
-    if(isWall(cx+left.dx,  cy+left.dy))  paintSideCell(zN, zF, -1, seed^0x1234);
-    else paintOpening(zN, zF, -1, cx, cy, left.dx,  left.dy,  fwd.dx, fwd.dy, seed^0x1234);
-    if(isWall(cx+right.dx, cy+right.dy)) paintSideCell(zN, zF,  1, seed^0x5678);
-    else paintOpening(zN, zF,  1, cx, cy, right.dx, right.dy, fwd.dx, fwd.dy, seed^0x5678);
   }
+  list.sort((a,b)=>b.d-a.d);
+
+  list.forEach(({lat,k})=>{
+    const zN=Math.max(ZMIN, k-0.5), zF=k+0.5;
+    const x0=lat-0.5, x1=lat+0.5;
+    const c=cellOf(lat,k);
+    const seed=Math.round((c.x*73856093)^(c.y*19349663)^(k*83492791)^(lat*2654435761));
+    if(isWall(c.x,c.y)){
+      if(k===0) return;                       // 自分のマスが壁になることはない
+      // カメラを向いている面だけを描く
+      if(!wallAt(lat,k-1)) paintPlaneZ(zN, x0, x1, seed);              // 手前の面
+      if(lat>0 && !wallAt(lat-1,k)) paintPlaneX(x0, zN, zF, seed^0x11); // 左の面
+      if(lat<0 && !wallAt(lat+1,k)) paintPlaneX(x1, zN, zF, seed^0x22); // 右の面
+    }else{
+      paintPlaneY( CEIL_H,  x0, x1, zN, zF, CEIL_BASE,  seed^0x9e37, 'ceil');
+      paintPlaneY(-FLOOR_H, x0, x1, zN, zF, FLOOR_BASE, seed,        'floor');
+    }
+  });
 
   // 灯りの減衰：中央から離れるほど暗く落とす（松明を持って歩く感じ）
   let vg=dctx.createRadialGradient(DW/2,DH*0.52,DW*0.14, DW/2,DH*0.52,DW*0.72);
@@ -1909,6 +2080,42 @@ function drawDungeon(){
   dctx.restore();
 }
 
+/* ===== 宝箱 =====
+   階段しか無い床だと探索する理由がないので、行き止まりに宝を置いてある。
+   中身は階層に応じて増える。 */
+function openChest(){
+  const m=floorScale(floorIndex);
+  SFX.loot();
+  const roll=Math.random();
+  if(roll<0.40){                                   // 金貨
+    const g=Math.round((25+Math.floor(Math.random()*35))*m);
+    addGold(g);
+    elExploreLog.textContent=`古びた櫃だ。金貨が ${g} 枚、埃をかぶって眠っていた。`;
+  }else if(roll<0.80){                             // 道具
+    const pool=['herb','herb','elixir','ether','feather','smoke'];
+    const k=pool[Math.floor(Math.random()*pool.length)];
+    const n=1+(Math.random()<0.35?1:0);
+    for(let i=0;i<n;i++) addItem(k);
+    elExploreLog.textContent=`櫃の中に ${itemName(k)}${n>1?' ×'+n:''} が納められていた。`;
+  }else{                                           // 装備
+    const rar = m>=3.5 ? (Math.random()<0.35?'epic':'rare')
+              : m>=2.0 ? (Math.random()<0.35?'rare':'uncommon')
+              : (Math.random()<0.4?'uncommon':'common');
+    const pool=droppableKeys(rar);
+    if(pool.length){
+      const k=pool[Math.floor(Math.random()*pool.length)];
+      addItem(k);
+      elExploreLog.textContent=`櫃の底から ${itemName(k)} が出てきた。`;
+    }else{
+      const g=Math.round(40*m); addGold(g);
+      elExploreLog.textContent=`櫃は空だった。隅に金貨が ${g} 枚。`;
+    }
+  }
+  refreshHud();
+  drawDungeon();
+  drawMinimap();
+}
+
 /* ---------- 探索 操作 ---------- */
 function refreshHud(){
   elPos.textContent=`地下${floorIndex+1}階`;
@@ -1917,6 +2124,18 @@ function refreshHud(){
   const total=party.reduce((s,u)=>s+Math.max(0,u.hp),0);
   const max=party.reduce((s,u)=>s+effStats(u).maxhp,0);
   elPartyHp.textContent=`${total}/${max}`;
+  // 魔力は残量が行動を左右するので、探索中も見えるようにしておく
+  if(elPartyMp){
+    const casters=party.filter(u=>mpMax(u)>0);
+    if(casters.length){
+      const mp=casters.reduce((s,u)=>s+clampMp(u),0);
+      const mpMaxTotal=casters.reduce((s,u)=>s+mpMax(u),0);
+      elPartyMp.textContent=`${mp}/${mpMaxTotal}`;
+      elPartyMp.style.color = mp <= mpMaxTotal*0.25 ? '#8a4a4a' : '';
+    }else{
+      elPartyMp.textContent='—';
+    }
+  }
   const elGold=document.getElementById('gold');
   if(elGold) elGold.textContent=`${gold} G`;
   markVisited();
@@ -1958,6 +2177,13 @@ function move(forward){
   const f=FLOORS[floorIndex];
   // ワープゾーン
   if(f.warps && f.warps.some(w=>w.x===player.x && w.y===player.y)){
+    // 宝箱：踏んだら開ける。一度開けたら空になる
+    const ci=f.chests ? f.chests.findIndex(c=>c.x===player.x && c.y===player.y) : -1;
+    if(ci>=0 && !f.opened[ci]){
+      f.opened[ci]=true;
+      openChest();
+      return;
+    }
     const linkKey=`${floorIndex}:${player.x},${player.y}`;
     const link=WARP_LINKS[linkKey];
     if(link){
@@ -2359,6 +2585,7 @@ const elBattleView=document.getElementById('battleView');
 const elExploreView=document.getElementById('exploreView');
 const elHint=document.getElementById('battleHint');
 const elInfo=document.getElementById('battleInfo');
+const elFoes=document.getElementById('battleFoes');
 const elHead=document.getElementById('battleHead');
 const elEndUnit=document.getElementById('bEndUnit');
 const elWait=document.getElementById('bWait');
@@ -2419,17 +2646,20 @@ function drawHitEffects(){
     bctx.lineWidth=Math.max(1.5, TILE*0.07*(1-t));
     bctx.beginPath(); bctx.arc(cx,cy,TILE*(0.22+t*0.5),0,Math.PI*2); bctx.stroke();
     bctx.globalAlpha=1;
-    // 増減量：上へ浮かびながら消える
+    // 増減量：上へ浮かびながら消える。
+    // 駒の頭上から出し、HPバーと重ならない高さまで上げる
     if(h.amount>0){
-      const rise=TILE*(0.15+t*0.75);
-      bctx.globalAlpha = t<0.7 ? 1 : Math.max(0,(1-t)/0.3);
+      const rise=TILE*(0.55+t*0.85);
+      const pop = t<0.18 ? 1+(0.18-t)*1.6 : 1;          // 出た瞬間だけ少し大きく
+      bctx.globalAlpha = t<0.65 ? 1 : Math.max(0,(1-t)/0.35);
       bctx.textAlign='center'; bctx.textBaseline='middle';
-      bctx.font=`bold ${Math.round(TILE*0.44)}px "Shippori Mincho", serif`;
-      bctx.lineWidth=Math.max(2, TILE*0.06);
-      bctx.strokeStyle='rgba(20,14,10,.85)';
+      bctx.font=`bold ${Math.round(TILE*0.60*pop)}px "Shippori Mincho", serif`;
+      bctx.lineJoin='round';
       const label=(heal?'+':'')+h.amount;
+      bctx.lineWidth=Math.max(3, TILE*0.13);
+      bctx.strokeStyle='rgba(14,10,8,.92)';
       bctx.strokeText(label, cx, cy-rise);
-      bctx.fillStyle=heal?'#b6f0bd':'#ffd9c2';
+      bctx.fillStyle=heal?'#c8ffcf':'#ffe6b0';
       bctx.fillText(label, cx, cy-rise);
       bctx.globalAlpha=1;
     }
@@ -2463,6 +2693,28 @@ const FLOOR_ENEMIES=[
   ['ガーゴイル','メデューサ','ハーピー','メデューサ','ミノタウルス'],// B5：深層の主級が出る
   ['ミノタウルス','吸血鬼','メデューサ','ガーゴイル','吸血鬼'],      // B6：古竜の領域
 ];
+/* 階層ごとの敵の強さ倍率。
+   素の敵データは B1 を基準にしてあるので、深い階ではここで引き上げる。
+   これが無いと、味方の成長に敵が置いていかれて全戦闘が作業になる。 */
+const FLOOR_SCALE=[1.00, 1.55, 2.20, 3.00, 3.90, 4.90];
+function floorScale(fi){ return FLOOR_SCALE[Math.min(fi, FLOOR_SCALE.length-1)] || 1; }
+// 雑魚敵に階層倍率をかける（ボス・中ボスは固有値を持つので対象外）
+function applyFloorScale(enemy, fi){
+  const m=floorScale(fi);
+  if(m<=1.001) return enemy;
+  enemy.hp   =Math.round(enemy.hp*m);
+  enemy.maxhp=Math.round(enemy.maxhp*m);
+  enemy.atk  =Math.round(enemy.atk*m);
+  enemy.def  =Math.round(enemy.def*Math.sqrt(m));   // 防御は控えめに（硬すぎると長引く）
+  if(enemy.spell) enemy.spell={...enemy.spell, pow:Math.round(enemy.spell.pow*m)};
+  // 見返りも同じだけ伸ばす。強さだけ上げると深層が延々とした作業になる
+  enemy.exp = Math.round(enemyExp(enemy)*m);
+  if(enemy.goldRange) enemy.goldRange=[Math.round(enemy.goldRange[0]*m), Math.round(enemy.goldRange[1]*m)];
+  else enemy.goldRange=[Math.round((({1:3,2:8,3:20})[enemy.rank||1])*m),
+                        Math.round((({1:8,2:18,3:40})[enemy.rank||1])*m)];
+  return enemy;
+}
+
 function pickEnemyForFloor(){
   const names=FLOOR_ENEMIES[floorIndex]||FLOOR_ENEMIES[0];
   const nm=names[Math.floor(Math.random()*names.length)];
@@ -2576,6 +2828,7 @@ function startBattle(isBoss, midbossKey){
     units.push({
       name:u.name, cls:u.cls, sprite:sp, side:'ally',
       maxhp:s.maxhp, hp:Math.min(u.hp,s.maxhp),
+      maxmp:s.maxmp, mp:Math.min(clampMp(u), s.maxmp),
       atk:s.atk, def:s.def, mov:s.mov, rng:s.rng, spell:s.spell, spells:s.spells, slayMult:s.slayMult, critRate:s.critRate,
       ref:u,
       x:startCols[i%3], y:BH_-2, acted:false, col:'#2ef0d0', alive:true
@@ -2592,6 +2845,7 @@ function startBattle(isBoss, midbossKey){
       units.push({
         name:c.name, cls:c.cls, sprite:c.sprite, side:'ally',
         maxhp:s.maxhp, hp:Math.min(c.hp,s.maxhp),
+        maxmp:s.maxmp, mp:Math.min(clampMp(c), s.maxmp),
         atk:s.atk, def:s.def, mov:s.mov, rng:s.rng, spell:s.spell, spells:s.spells, slayMult:s.slayMult, critRate:compCrit,
         beastSlay:h.beastSlay,        // 動物特効（狩人）
         counterRate:h.counterRate,    // 反撃（侍）
@@ -2606,16 +2860,24 @@ function startBattle(isBoss, midbossKey){
     let bossUnit=DRAGON;
     if(loop>=3) bossUnit=GOLDEN_DRAGON;
     else if(loop>=2) bossUnit=BLACK_DRAGON;
-    units.push(applyLoopMult({...bossUnit, side:'foe', x:Math.floor(BG/2), y:1, acted:false, alive:true}));
+    const bs=floorScale(5)*1.25;
+    const scaled={...bossUnit,
+      hp:Math.round(bossUnit.hp*bs), maxhp:Math.round(bossUnit.maxhp*bs),
+      atk:Math.round(bossUnit.atk*bs), def:Math.round(bossUnit.def*Math.sqrt(bs)),
+      // 吐息は範囲攻撃なので伸びを抑える（そのまま倍率をかけると全滅が確定する）
+      spell:bossUnit.spell?{...bossUnit.spell, pow:Math.round(bossUnit.spell.pow*bs*0.55)}:null,
+      exp:Math.round((bossUnit.exp||120)*bs),
+      goldRange:bossUnit.goldRange?[Math.round(bossUnit.goldRange[0]*bs),Math.round(bossUnit.goldRange[1]*bs)]:null};
+    units.push(applyLoopMult({...scaled, side:'foe', x:Math.floor(BG/2), y:1, acted:false, alive:true}));
   }else if(midbossKey){
     // 中ボス1体＋手下の雑魚2体
     const mb=MIDBOSSES[midbossKey];
-    units.push(applyLoopMult({...mb, side:'foe', x:Math.floor(BG/2), y:1, acted:false, alive:true}));
+    units.push(applyLoopMult(applyFloorScale({...mb, side:'foe', x:Math.floor(BG/2), y:1, acted:false, alive:true}, floorIndex)));
     // 階層プールから手下を2体
     const cols=[1,6];
     for(let i=0;i<2;i++){
       const t=pickEnemyForFloor();
-      units.push(applyLoopMult({...t, side:'foe', x:cols[i], y:2, acted:false, alive:true}));
+      units.push(applyLoopMult(applyFloorScale({...t, side:'foe', x:cols[i], y:2, acted:false, alive:true}, floorIndex)));
     }
   }else{
     // 通常戦：雑魚1〜4体（階層別プールから）
@@ -2624,7 +2886,7 @@ function startBattle(isBoss, midbossKey){
     const cols=[1,3,5,6];
     for(let i=0;i<cnt;i++){
       const t=pickEnemyForFloor();
-      units.push(applyLoopMult({...t, side:'foe', x:cols[i], y:1+(i%2), acted:false, alive:true}));
+      units.push(applyLoopMult(applyFloorScale({...t, side:'foe', x:cols[i], y:1+(i%2), acted:false, alive:true}, floorIndex)));
     }
   }
   phase='player';
@@ -2672,8 +2934,8 @@ function drawBattle(){
   if(shakeSrc) bctx.translate((shakeSrc.frame%2?-1:1)*TILE*0.06, 0);
 
   // 床（水彩タッチの石床：石灰色と霧青緑の中間色）
-  const stoneA=['#7e8a86','#828c84','#79857f','#838b82'];
-  const stoneB=['#6f7b78','#727d74','#6b7771','#747c73'];
+  const stoneA=['#828d89','#868f87','#7d8983','#879086'];
+  const stoneB=['#6e7a75','#717b73','#6a7570','#737c72'];
   for(let y=0;y<BH_;y++){
     for(let x=0;x<BG;x++){
       const px=BOFFX+x*TILE, py=BOFFY+y*TILE;
@@ -2682,17 +2944,16 @@ function drawBattle(){
       const base=alt?stoneA[(x+y)%4]:stoneB[(x*3+y)%4];
       // ベタ下塗り
       bctx.fillStyle=base; bctx.fillRect(px,py,TILE,TILE);
-      // 水彩の滲み（タイル内に色違いの溜まりを数個）
+      // 石の色ムラ。以前は滲みを重ねすぎて泥のように見えたので、薄く一度だけ
       const cx=px+TILE/2, cy=py+TILE/2;
-      wash(bctx,cx,cy,TILE*0.5,TILE*0.5, alt?'#8a9591':'#69756f', 0.18, rnd, 6);
-      wash(bctx,cx+(rnd()-0.5)*TILE*0.4, cy+(rnd()-0.5)*TILE*0.4, TILE*0.3,TILE*0.28,
-           rnd()>0.5?'#929c97':'#5f6b66', 0.14, rnd, 5);
-      // ほのかな苔（緑）をランダムに少しだけ
-      if(rnd()>0.7){
-        wash(bctx,px+rnd()*TILE,py+rnd()*TILE,TILE*0.18,TILE*0.16,'#6f7a55',0.16,rnd,4);
+      wash(bctx,cx+(rnd()-0.5)*TILE*0.3, cy+(rnd()-0.5)*TILE*0.3, TILE*0.34,TILE*0.30,
+           rnd()>0.5?'#9aa49f':'#6d7873', 0.10, rnd, 4);
+      // ほのかな苔（緑）をたまに
+      if(rnd()>0.84){
+        wash(bctx,px+rnd()*TILE,py+rnd()*TILE,TILE*0.16,TILE*0.14,'#6f7a55',0.14,rnd,3);
       }
-      // 目地（霧色のにじんだ線）
-      bctx.strokeStyle='rgba(60,70,72,.5)';
+      // 目地：石畳に見えるよう、はっきり刻む
+      bctx.strokeStyle='rgba(48,57,58,.62)';
       bctx.lineWidth=1;
       bctx.strokeRect(px+0.5,py+0.5,TILE,TILE);
       // 上辺うっすら明・下辺うっすら暗（控えめな立体）
@@ -2848,9 +3109,11 @@ function selectUnit(u){
   // 魔法を持つキャラなら魔法ボタンを表示
   const spells=u.spells||[];
   if(spells.length>0){
+    const any=spells.some(sp=>canAfford(u,sp));
     elSpell.style.display='';
-    elSpell.disabled=false;
-    elSpell.textContent= spells.length>1 ? '魔法を選ぶ' : ('魔法：'+spells[0].name);
+    elSpell.disabled=!any;
+    elSpell.textContent = !any ? '魔力切れ'
+      : (spells.length>1 ? `魔法 ${u.mp}` : `${spells[0].name} ${spellCost(spells[0])}`);
   }else{
     elSpell.style.display='none';
   }
@@ -2920,6 +3183,14 @@ function enterSpellAim(){
 // 魔法発動（種別で効果を分岐）
 function castSpell(target){
   const caster=selected, sp=currentSpell();
+  if(!canAfford(caster, sp)){
+    elHint.textContent=`${caster?caster.name:''} の魔力が足りない。`;
+    spellAiming=false; spellTargets=[]; spellAreaCells=[];
+    drawBattle();
+    return;
+  }
+  caster.mp -= spellCost(sp);
+  if(caster.ref) caster.ref.mp = caster.mp;   // 戦闘後も減ったまま持ち帰る
   if(!sp) return;
   // === 全体攻撃：全敵に順次火の玉 ===
   if(sp.type==='damage_all'){
@@ -3622,6 +3893,10 @@ elSpell.onclick=()=>{
   }
 };
 function activateSpell(sp){
+  if(!canAfford(selected, sp)){
+    elHint.textContent=`${selected.name} の魔力が足りない。`;
+    return;
+  }
   // 全体魔法は照準不要、即発動。それ以外は通常の照準モードへ
   if(sp.type==='damage_all' || sp.type==='heal_all' || sp.type==='heal_full'){
     castSpell(null);
@@ -3662,6 +3937,12 @@ function applyItemToHp(it, cur, max){
 function useItemOnMember(key, m){      // 探索中の対象（party / 同行者）
   const it=ITEMS[key]; if(!it) return null;
   const max=effStats(m).maxhp;
+  if(it.type==='mp'){
+    const mmax=mpMax(m); if(!mmax || m.hp<=0) return null;
+    clampMp(m); if(m.mp>=mmax) return null;
+    const before=m.mp; m.mp=Math.min(mmax, m.mp+it.pow);
+    return `${m.name} の魔力が ${m.mp-before} 回復した。`;
+  }
   if(it.type==='heal'||it.type==='heal_full'){
     if(m.hp<=0 || m.hp>=max) return null;
     const before=m.hp;
@@ -3677,6 +3958,13 @@ function useItemOnMember(key, m){      // 探索中の対象（party / 同行者
 }
 function useItemOnUnit(key, u){        // 戦闘中の対象（ally ユニット）
   const it=ITEMS[key]; if(!it) return null;
+  if(it.type==='mp'){
+    if(!u.alive || !u.maxmp || u.mp>=u.maxmp) return null;
+    const before=u.mp; u.mp=Math.min(u.maxmp, u.mp+it.pow);
+    if(u.ref) u.ref.mp=u.mp;
+    spawnHitFx(u, u.mp-before, 'heal');
+    return `${u.name} の魔力が ${u.mp-before} 回復した。`;
+  }
   if(it.type==='heal'||it.type==='heal_full'){
     if(!u.alive || u.hp>=u.maxhp) return null;
     const before=u.hp;
@@ -3696,9 +3984,10 @@ function useItemOnUnit(key, u){        // 戦闘中の対象（ally ユニット
   return null;
 }
 // その道具をその対象に使えるか（使えない相手をボタンに出さないため）
-function canUseItemOn(key, cur, max, alive){
+function canUseItemOn(key, cur, max, alive, mp, mpMaxV){
   const it=ITEMS[key]; if(!it) return false;
   if(it.type==='revive') return !alive || cur<=0;
+  if(it.type==='mp')     return alive && cur>0 && mpMaxV>0 && mp<mpMaxV;
   if(it.type==='heal'||it.type==='heal_full') return (alive && cur>0) && cur<max;
   return false;
 }
@@ -3738,16 +4027,18 @@ function pickItemTarget(key, where){
   const targets=[];
   if(where==='battle'){
     units.filter(u=>u.side==='ally').forEach(u=>{
-      if(canUseItemOn(key, u.hp, u.maxhp, u.alive))
-        targets.push({label:`${u.name}　HP ${Math.max(0,u.hp)}/${u.maxhp}`, apply:()=>useItemOnUnit(key,u)});
+      if(canUseItemOn(key, u.hp, u.maxhp, u.alive, u.mp, u.maxmp))
+        targets.push({label:`${u.name}　HP ${Math.max(0,u.hp)}/${u.maxhp}`+(u.maxmp?`　MP ${Math.max(0,u.mp)}/${u.maxmp}`:''),
+                      apply:()=>useItemOnUnit(key,u)});
     });
   }else{
     const members=[...party];
     if(activeCompanion && hiredCompanions[activeCompanion]) members.push(hiredCompanions[activeCompanion]);
     members.forEach(m=>{
-      const max=effStats(m).maxhp;
-      if(canUseItemOn(key, m.hp, max, m.hp>0))
-        targets.push({label:`${m.name}　HP ${Math.max(0,m.hp)}/${max}`, apply:()=>useItemOnMember(key,m)});
+      const max=effStats(m).maxhp, mmax=mpMax(m);
+      if(canUseItemOn(key, m.hp, max, m.hp>0, clampMp(m), mmax))
+        targets.push({label:`${m.name}　HP ${Math.max(0,m.hp)}/${max}`+(mmax?`　MP ${m.mp}/${mmax}`:''),
+                      apply:()=>useItemOnMember(key,m)});
     });
   }
   elSpellChoiceList.innerHTML='';
@@ -3755,7 +4046,9 @@ function pickItemTarget(key, where){
   if(targets.length===0){
     const none=document.createElement('div');
     none.style.cssText='font-size:12px;color:#8a7d5e;letter-spacing:1px;padding:6px 2px;';
-    none.textContent = it.type==='revive' ? '倒れている者はいない。' : '傷ついている者はいない。';
+    none.textContent = it.type==='revive' ? '倒れている者はいない。'
+                     : it.type==='mp'     ? '魔力の減っている者はいない。'
+                     : '傷ついている者はいない。';
     elSpellChoiceList.appendChild(none);
   }
   targets.forEach(t=>{
@@ -3816,9 +4109,12 @@ function doFlee(guaranteed){
   }
 }
 
+function spellCost(sp){ return (sp && sp.cost) || 0; }
+function canAfford(caster, sp){ return (caster?caster.mp:0) >= spellCost(sp); }
+
 function openSpellChoice(spells){
   elSpellChoiceList.innerHTML='';
-  setChoiceTitle();
+  setChoiceTitle(selected ? `使用する魔法を選ぶ（魔力 ${selected.mp}/${selected.maxmp}）` : null);
   spells.forEach((sp,i)=>{
     const b=document.createElement('button');
     b.className='key';
@@ -3828,6 +4124,9 @@ function openSpellChoice(spells){
     else if(sp.type==='damage_all') desc=`全体攻撃・1発${sp.pow}`;
     else if(sp.type==='heal_all') desc=`全体回復・1人${sp.pow}`;
     else if(sp.type==='heal_full') desc=`全員を完全回復`;
+    desc += `　／　魔力 ${spellCost(sp)}`;
+    const poor=!canAfford(selected, sp);
+    if(poor){ b.disabled=true; b.style.opacity='0.45'; desc+='（足りない）'; }
     b.innerHTML=`<div style="font-weight:700">${sp.name}</div><div style="font-size:11px;color:#8a7d5e;letter-spacing:1px;margin-top:2px">${desc}</div>`;
     b.style.padding='10px';
     b.onclick=()=>{
@@ -4112,7 +4411,7 @@ document.getElementById('overlayBtn').onclick=()=>{
     elExploreLog.textContent='古竜は斃れた。聖域に、もう霧の気配はない。（クリア後も探索を続けられます）';
   }else if(wasLose){
     elExploreLog.textContent = restoredFromSave
-      ? '気がつくと、最後に旅を記録した祭壇のそばに立っていた。刻まれた記録が、一行を引き戻した。'
+      ? '気がつくと、最後に記録された場所に立っていた。刻まれた旅が、一行を引き戻したらしい。'
       : '気がつくと入口に戻されていた……。';
   }else{
     elExploreLog.textContent='戦いを終え、再び迷宮を進む。';
@@ -4128,15 +4427,25 @@ function renderInfo(){
     fleeBtn.disabled=locked;
     fleeBtn.textContent=locked?'逃げられない':'逃げる';
   }
+  // 敵は盤面の上（PCは操作パネルの上）、味方はその下。別々のパネルに描く
   elInfo.innerHTML='';
+  elFoes.innerHTML='';
   units.forEach(u=>{
     const d=document.createElement('div');
     d.className='unitcard'+(u.side==='foe'?' foe':'');
     const pct=Math.max(0,u.hp)/u.maxhp*100;
-    d.innerHTML=`<div class="nm">${u.name}${u.alive?'':' ✕'}</div>
-      <div class="sub">${u.alive?('HP '+Math.max(0,u.hp)+'/'+u.maxhp):'戦闘不能'}</div>
-      <div class="hpbar"><i style="width:${pct}%"></i></div>`;
-    elInfo.appendChild(d);
+    if(!u.alive) d.className+=' down';
+    const hasMp = u.side==='ally' && u.maxmp>0;
+    const mpPct = hasMp ? Math.max(0,u.mp)/u.maxmp*100 : 0;
+    d.innerHTML=`<div class="nm">${u.name}${u.alive?'':' ✕'}</div>`
+      + (u.alive
+          ? `<div class="sub"><span>HP ${Math.max(0,u.hp)}/${u.maxhp}</span>`
+            + (hasMp?`<span class="mp">MP ${Math.max(0,u.mp)}/${u.maxmp}</span>`:'')
+            + `</div>`
+          : `<div class="sub"><span>戦闘不能</span></div>`)
+      + `<div class="hpbar"><i style="width:${pct}%"></i></div>`
+      + (hasMp?`<div class="mpbar"><i style="width:${mpPct}%"></i></div>`:'');
+    (u.side==='foe'?elFoes:elInfo).appendChild(d);
   });
 }
 
@@ -4179,7 +4488,9 @@ function renderParty(){
     const div=document.createElement('div');
     div.className='member';
     // ステータス行
-    let statLine=`<span>HP <b>${s.maxhp}</b></span><span>攻撃 <b>${s.atk}</b></span><span>防御 <b>${s.def}</b></span><span>移動 <b>${s.mov}</b></span>`;
+    let statLine=`<span>HP <b>${s.maxhp}</b></span>`;
+    if(s.maxmp) statLine+=`<span>MP <b>${clampMp(m)}/${s.maxmp}</b></span>`;
+    statLine+=`<span>攻撃 <b>${s.atk}</b></span><span>防御 <b>${s.def}</b></span><span>移動 <b>${s.mov}</b></span>`;
     if(s.spell){
       statLine+=`<span>${s.spell.type==='heal'?'回復':'魔力'} <b>${s.spell.pow}</b></span><span>射程 <b>${s.spell.radius}</b></span>`;
     }
@@ -4265,6 +4576,7 @@ const elShopLog=document.getElementById('shopLog');
 const elShopList=document.getElementById('shopList');
 
 function openTown(){
+  autoSave();          // 町に着いた時点を自動で記録
   hideView(elExploreView);
   hideView(elBattleView);
   hideView(elPartyView);
@@ -4323,7 +4635,7 @@ function visitInn(){
     SFX.heal();
     allMembers.forEach(m=>{
       const max=effStats(m).maxhp;
-      if(m.hp>0) m.hp=max;   // 戦闘不能者は教会へ
+      if(m.hp>0){ m.hp=max; m.mp=mpMax(m); }   // 戦闘不能者は教会へ
     });
     elTownLog.textContent='よく眠れた。傷は癒え、明日への力が満ちる。';
     refreshTownGold();
@@ -4345,7 +4657,7 @@ function visitChurch(){
         return;
       }
       SFX.heal();
-      downed.forEach(m=>{ m.hp=Math.floor(effStats(m).maxhp*0.5); });
+      downed.forEach(m=>{ m.hp=Math.floor(effStats(m).maxhp*0.5); m.mp=Math.floor(mpMax(m)*0.5); });
       elTownLog.textContent=`${names} に息吹が戻った。`;
       refreshTownGold();
     });
@@ -4718,7 +5030,7 @@ function saveGame(){
       party: party.map(m=>({
         name:m.name, cls:m.cls, sprite:m.sprite, level:m.level, exp:m.exp,
         base:{...m.base}, spellBase: m.spellBase ? {...m.spellBase} : null,
-        equip:{...m.equip}, hp:m.hp
+        equip:{...m.equip}, hp:m.hp, mp:m.mp
       })),
       inventory:{...inventory},
       gold,
@@ -4728,12 +5040,13 @@ function saveGame(){
       loop,
       hiredCompanions: Object.keys(hiredCompanions).reduce((acc,k)=>{
         const c=hiredCompanions[k];
-        acc[k]={cls:c.cls, name:c.name, sprite:c.sprite, level:c.level, exp:c.exp, hp:c.hp, base:{...c.base}, equip:{...c.equip}, beastSlay:c.beastSlay};
+        acc[k]={cls:c.cls, name:c.name, sprite:c.sprite, level:c.level, exp:c.exp, hp:c.hp, mp:c.mp, base:{...c.base}, equip:{...c.equip}, beastSlay:c.beastSlay};
         return acc;
       }, {}),
       activeCompanion,
       midbosses: FLOOR_MIDBOSS.map(mb=>mb?{key:mb.key, defeated:mb.defeated}:null),
       visited: FLOORS.map(f=>f.visited.map(row=>row.slice())),
+      chests: FLOORS.map(f=>(f.opened||[]).slice()),
       ts: Date.now()
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -4751,7 +5064,7 @@ function loadGame(){
     party = d.party.map(m=>({
       name:m.name, cls:m.cls, sprite:m.sprite, level:m.level, exp:m.exp,
       base:{...m.base}, spellBase: m.spellBase ? {...m.spellBase} : null,
-      equip:{...m.equip}, hp:m.hp
+      equip:{...m.equip}, hp:m.hp, mp:m.mp
     }));
     inventory={...d.inventory};
     gold=d.gold||0;
@@ -4768,6 +5081,9 @@ function loadGame(){
     if(d.visited){
       d.visited.forEach((grid,i)=>{ if(FLOORS[i]) FLOORS[i].visited=grid.map(row=>row.slice()); });
     }
+    if(d.chests){
+      d.chests.forEach((arr,i)=>{ if(FLOORS[i]&&Array.isArray(arr)) FLOORS[i].opened=arr.slice(); });
+    }
     return true;
   }catch(e){ console.error(e); return false; }
 }
@@ -4783,6 +5099,27 @@ function saveTimestamp(){
   }catch(e){ return null; }
 }
 
+/* ---------- 遊び方 ---------- */
+const elHelpView=document.getElementById('helpView');
+let helpReturn=null;   // 戻り先のビュー
+function openHelp(from){
+  helpReturn=from;
+  hideView(from);
+  showView(elHelpView);
+  elHelpView.scrollTop=0;
+  const hb=elHelpView.querySelector('.help-body'); if(hb) hb.scrollTop=0;
+}
+function closeHelp(){
+  hideView(elHelpView);
+  showView(helpReturn||elTitleView);
+  helpReturn=null;
+}
+document.getElementById('bHelpBack').onclick=closeHelp;
+document.getElementById('bTitleHelp').onclick=()=>openHelp(elTitleView);
+document.getElementById('bTownHelp').onclick=()=>openHelp(elTownView);
+document.getElementById('bTitleSound').onclick=()=>setSound(!soundOn);
+document.getElementById('bTownSound').onclick=()=>setSound(!soundOn);
+
 /* ---------- タイトル ---------- */
 const elTitleView=document.getElementById('titleView');
 const elMainTitlebar=document.getElementById('mainTitlebar');
@@ -4797,7 +5134,7 @@ function startNewGame(){
   loop=1;
   hiredCompanions={};
   activeCompanion=null;
-  FLOORS.forEach(f=>{ f.visited=f.grid.map(row=>row.map(()=>false)); });
+  FLOORS.forEach(f=>{ f.visited=f.grid.map(row=>row.map(()=>false)); f.opened=(f.chests||[]).map(()=>false); });
   FLOOR_MIDBOSS.forEach(mb=>{ if(mb) mb.defeated=false; });
   // プロローグを表示
   showPrologue();
@@ -4854,6 +5191,7 @@ if(!hasSave()){
   continueBtn.disabled=true;
   continueBtn.textContent='続きから（記録なし）';
 }
+setSound(soundOn);
 loadSpriteImages();
 
 // 画面の縦横比に応じてレイアウトを切り替え（JSで判定するのでiOS制限の影響を受けない）
