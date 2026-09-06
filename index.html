@@ -974,7 +974,8 @@
 
       <h3>探索</h3>
       <p>迷宮では前進・後退と左右の方向転換で歩く。歩いていると霧の生き物に出くわす。<br>
-         地図は歩いた場所だけが記される。<b>階段</b>で階層を移動し、B1 の上り階段から町へ戻れる。</p>
+         地図は歩いた場所だけが記される。<b>階段</b>で階層を移動し、B1 の上り階段から町へ戻れる。<br>
+         道中の<b>宝箱</b>は踏めば開く。最下層には<b>石版</b>があり、踏むと刻まれた文が読める。</p>
       <table class="help-keys">
         <tr><td>PC</td><td>↑↓←→ または W A S D</td></tr>
         <tr><td>スマホ</td><td>画面下の方向ボタン</td></tr>
@@ -1458,17 +1459,17 @@ const FLOOR_SRC=[
   // B6：最深部、最奥に魔法陣（古竜）
   [
     "##############",
-    "#<...#.......#",
+    "#<.!.#.......#",
     "#.##.#.#####.#",
     "#.#..#.....#.#",
     "#.#.######.#.#",
     "#.#......#.#.#",
     "#.######.#.#.#",
-    "#......#...#.#",
+    "#...!..#...#.#",
     "######.#####.#",
     "#......#.....#",
     "#.######.###.#",
-    "#*........$#$#",
+    "#*.!......$#$#",
     "##############",
   ],
 ];
@@ -1478,6 +1479,7 @@ function buildFloor(src){
   const grid=[]; let stairsDown=null, stairsUp=null, altar=null;
   const chests=[];  // この床の宝箱の位置
   const warps=[];   // この床にあるワープ位置（{x,y}の配列）。飛び先はFLOOR_WARP_LINKSで指定
+  const tablets=[];  // この床の石版。文面は FLOOR_TABLETS[階][並び順] で対応させる
   src.forEach((row,y)=>{
     const line=[];
     for(let x=0;x<row.length;x++){
@@ -1489,11 +1491,12 @@ function buildFloor(src){
         else if(c==='*') altar={x,y};
         else if(c==='~') warps.push({x,y});
         else if(c==='$'){ chests.push({x,y}); }
+        else if(c==='!'){ tablets.push({x,y}); }
       }
     }
     grid.push(line);
   });
-  return {chests, opened:chests.map(()=>false), grid, stairsDown, stairsUp, altar, warps,
+  return {chests, opened:chests.map(()=>false), tablets, grid, stairsDown, stairsUp, altar, warps,
           visited: grid.map(row=>row.map(()=>false))};
 }
 const FLOORS=FLOOR_SRC.map(buildFloor);
@@ -1547,6 +1550,8 @@ function drawMinimap(){
         mmctx.fillStyle='#5d8aa8'; mmctx.fillRect(px+1,py+1,cell-2,cell-2);
       }else if(f.altar && f.altar.x===x && f.altar.y===y){
         mmctx.fillStyle='#a8443a'; mmctx.fillRect(px+1,py+1,cell-2,cell-2);
+      }else if(f.tablets && f.tablets.some(t=>t.x===x&&t.y===y)){
+        mmctx.fillStyle='#d5d8cf'; mmctx.fillRect(px+1,py+1,cell-2,cell-2);
       }else if(f.warps && f.warps.some(w=>w.x===x&&w.y===y)){
         mmctx.fillStyle='#9a6ec0'; mmctx.fillRect(px+1,py+1,cell-2,cell-2);
       }
@@ -1686,14 +1691,19 @@ function freshParty(){
     {name:'ガザール', cls:'賢者', sprite:'sage', level:1, exp:0,
      base:{hp:34, atk:9, def:4, mov:3, rng:1}, spellBase:{name:'業火', type:'damage', pow:14, radius:4},
      equip:{weapon:'staff_oak', armor:'cloak_old'}, hp:34, mp:14},
-    {name:'戦士レン', cls:'戦士', sprite:'warrior', level:1, exp:0,
+    {name:'レン', cls:'戦士', sprite:'warrior', level:1, exp:0,
      base:{hp:46, atk:11, def:7, mov:3, rng:1},
      equip:{weapon:'sword_rust', armor:'armor_leather'}, hp:46, mp:0},
-    {name:'僧侶ミラ', cls:'僧侶', sprite:'priest', level:1, exp:0,
+    {name:'ミラ', cls:'僧侶', sprite:'priest', level:1, exp:0,
      base:{hp:30, atk:7, def:5, mov:4, rng:1}, spellBase:{name:'癒し', type:'heal', pow:18, radius:3},
      equip:{weapon:'rod_pilgrim', armor:'cloak_old'}, hp:30, mp:14},
   ];
 }
+// 以前の記録には職業名を頭に付けた名前が入っている。クラスチェンジしても
+// その頭だけは変わらず「戦士レン」が剣聖になっても戦士のままなので、
+// 読み込むときに落として現在の呼び名へ揃える。
+const LEGACY_NAMES={'戦士レン':'レン', '僧侶ミラ':'ミラ'};
+function fixName(n){ return LEGACY_NAMES[n] || n; }
 let party = freshParty();
 
 /* ===== 魔力（MP） =====
@@ -1826,6 +1836,29 @@ function ownedItemKeys(){
 }
 
 // キーアイテム：装備ではなく、雇用条件などに使う特殊なアイテム
+/* 石版。地図に '!' を置いた順（上の行から、同じ行なら左から）に対応する。
+   周回してもう一度潜る必要があることを、少しずつ明かしていく。
+   after を書いた石版は、二周目以降だけ文面が変わる。 */
+const FLOOR_TABLETS={
+  5: [
+    {text:'石版に、無数の名が刻まれている。いずれも竜を斃した者たちのものだ。'
+        +'──ならば、なぜ竜はまだここにいる。'},
+    {text:'「竜は黄昏ではない。黄昏の器だ。器を砕いたところで、'
+        +'霧は次の器を見つけるだけだ」'},
+    {text:'「討ち果たしても、聖域は閉じない。竜を斃した者は、町を出て、'
+        +'もう一度ここへ降りることになる。次に待つ影は、いまより深い」',
+     after:'「よく戻った。霧はおまえの名も、いずれこの石に刻むだろう」'},
+  ],
+};
+
+function readTablet(fi, idx){
+  const list=FLOOR_TABLETS[fi];
+  const t=list && list[idx];
+  if(!t){ elExploreLog.textContent='文字は削れて、もう読めない。'; return; }
+  SFX.dialog();
+  elExploreLog.textContent = (loop>=2 && t.after) ? t.after : t.text;
+}
+
 const KEY_ITEMS={
   key_scroll: {name:'忍びの結び文', desc:'古い和紙に綴られた、一族への伝言。'},
   key_blade:  {name:'折れた刀',   desc:'刃が半ばで断たれた、誰かの形見。'},
@@ -2510,6 +2543,20 @@ function closeConfirm(){ elConfirm.style.display='none'; confirmYesCb=null; conf
 document.getElementById('confirmYes').onclick=()=>{ const cb=confirmYesCb; closeConfirm(); if(cb) cb(); };
 document.getElementById('confirmNo').onclick =()=>{ const cb=confirmNoCb;  closeConfirm(); if(cb) cb(); };
 
+/* 階段を下りるか尋ねる。番人を倒した直後にも同じ問いを出すので、
+   move() から切り出して共有している。 */
+function promptDescend(){
+  SFX.dialog();
+  askConfirm('階段を下りますか？', ()=>{
+    SFX.stairs();
+    changeFloor(+1);
+    elExploreLog.textContent=`階段を下りた。地下 ${floorIndex+1} 階。`;
+    drawDungeon(); refreshHud();
+  }, ()=>{
+    elExploreLog.textContent='階段の前で立ち止まった。';
+  });
+}
+
 function move(forward){
   if(encLocked()) return;         // 霧に呑まれている間は進めない
   const fwd=DIRS[player.dir];
@@ -2526,15 +2573,22 @@ function move(forward){
   drawDungeon(); refreshHud();
 
   const f=FLOORS[floorIndex];
+  // 宝箱：踏んだら開ける。一度開けたら空になる。
+  // （以前はワープ判定の内側に入っていて、ワープを置いた階が無いため一度も開かなかった）
+  const ci=f.chests ? f.chests.findIndex(c=>c.x===player.x && c.y===player.y) : -1;
+  if(ci>=0 && !f.opened[ci]){
+    f.opened[ci]=true;
+    openChest();
+    return;
+  }
+  // 石版：踏むと刻まれた文が読める。読んでいる間は敵が出ない
+  const ti=f.tablets ? f.tablets.findIndex(t=>t.x===player.x && t.y===player.y) : -1;
+  if(ti>=0){
+    readTablet(floorIndex, ti);
+    return;
+  }
   // ワープゾーン
   if(f.warps && f.warps.some(w=>w.x===player.x && w.y===player.y)){
-    // 宝箱：踏んだら開ける。一度開けたら空になる
-    const ci=f.chests ? f.chests.findIndex(c=>c.x===player.x && c.y===player.y) : -1;
-    if(ci>=0 && !f.opened[ci]){
-      f.opened[ci]=true;
-      openChest();
-      return;
-    }
     const linkKey=`${floorIndex}:${player.x},${player.y}`;
     const link=WARP_LINKS[linkKey];
     if(link){
@@ -2563,15 +2617,7 @@ function move(forward){
       encSoon(350, ()=>fogSwallow(()=>startBattle(false, mb.key)));
       return;
     }
-    SFX.dialog();
-    askConfirm('階段を下りますか？', ()=>{
-      SFX.stairs();
-      changeFloor(+1);
-      elExploreLog.textContent=`階段を下りた。地下 ${floorIndex+1} 階。`;
-      drawDungeon(); refreshHud();
-    }, ()=>{
-      elExploreLog.textContent='階段の前で立ち止まった。';
-    });
+    promptDescend();
     return;
   }
   // 階段（上り）→B1なら町へ、それ以外は階上へ
@@ -2945,18 +2991,49 @@ function loadSpriteImages(){
 }
 
 
+/* 巨躯のボスは通常キャラと同じ基準では描けない。
+   縦位置の 0.96 は「足元をマスの下端に合わせて上へ伸ばす」値で、
+   1.2倍の駒に合わせたもの。3.5倍の竜に当てると2.5マス分せり上がり、
+   盤の上に余白が無いので頭と翼が画面の外へ出てしまう。
+   ボスだけ低い係数を使い、絵がマスを跨ぐように置く。 */
+const BIG_BOSS_SPRITES=new Set(['dragon','blackDragon','goldenDragon']);
+/* 巨躯のボスは1枚絵なので、コマ割りの動きは持てない。
+   代わりに、ゆっくりした呼吸（縦のわずかな伸縮）と、
+   半分を割ってからの怒りの輝きで「生き物」に見せる。 */
+let bossAnimT=0;      // 呼吸の位相（秒）
+let bossRage=false;   // HPが半分を割ったか
+let bossShake=0;      // 咆哮の揺れ（残りフレーム）
+const BOSS_DRAW_SCALE=5.25;   // 元画像は518px。252pxで描いてもまだ元の解像度に収まる
+const FOOT_NORMAL=0.96, FOOT_BOSS=0.62;
+
 // ゲームから呼ぶ統一インターフェース：タイル左上(dx,dy)・サイズsizeに収める
 function drawSprite(ctx, name, dx, dy, size, scale){
   const cx=dx+size/2;
   // 画像スプライトが用意されていればそれを使う
   const img=SPRITE_IMG_OBJ[name];
   if(img){
+    const boss=BIG_BOSS_SPRITES.has(name);
     let drawSize=size*1.2;       // 通常キャラの描画倍率
-    if(name==='dragon' || name==='blackDragon' || name==='goldenDragon') drawSize=size*3.5;
+    if(boss) drawSize=size*BOSS_DRAW_SCALE;
     else if(scale && scale>1.2) drawSize=size*scale*1.2;
+    if(boss){
+      // 怒りの輝き。絵そのものには触れず、背後に置くだけ
+      if(bossRage){
+        const gr=0.5+0.5*Math.sin(bossAnimT*3.4);
+        const rad=drawSize*0.46;
+        const g2=ctx.createRadialGradient(cx,dy+size-drawSize*0.34,rad*0.15,cx,dy+size-drawSize*0.34,rad);
+        g2.addColorStop(0,`rgba(214,74,40,${0.20+gr*0.16})`);
+        g2.addColorStop(0.6,`rgba(150,36,20,${0.10+gr*0.08})`);
+        g2.addColorStop(1,'rgba(120,24,12,0)');
+        ctx.fillStyle=g2;
+        ctx.fillRect(cx-rad, dy+size-drawSize*0.34-rad, rad*2, rad*2);
+      }
+      // 呼吸。息を吸うと縦にわずかに伸びる
+      drawSize *= 1 + Math.sin(bossAnimT*1.9)*(bossRage?0.028:0.018);
+    }
     // 中央寄せ、下端を足元に合わせる
     const drawX=cx-drawSize/2;
-    const drawY=dy+size - drawSize*0.96; // 足元はタイル下端付近
+    const drawY=dy+size - drawSize*(boss?FOOT_BOSS:FOOT_NORMAL);
     ctx.drawImage(img, drawX, drawY, drawSize, drawSize);
     return true;
   }
@@ -3370,7 +3447,7 @@ function startBattle(isBoss, midbossKey){
       spell:bossUnit.spell?{...bossUnit.spell, pow:Math.round(bossUnit.spell.pow*bs*0.55)}:null,
       exp:Math.round((bossUnit.exp||120)*bs),
       goldRange:bossUnit.goldRange?[Math.round(bossUnit.goldRange[0]*bs),Math.round(bossUnit.goldRange[1]*bs)]:null};
-    units.push(applyLoopMult({...scaled, side:'foe', x:Math.floor(BG/2), y:1, acted:false, alive:true}));
+    units.push(applyLoopMult({...scaled, side:'foe', x:Math.floor(BG/2), y:3, acted:false, alive:true}));
   }else if(midbossKey){
     // 中ボス1体＋手下の雑魚2体
     const mb=MIDBOSSES[midbossKey];
@@ -3422,6 +3499,7 @@ function startBattle(isBoss, midbossKey){
   }
   fitBattleCanvas();
   autoActing=null; autoAliveSeen=-1;
+  bossAnimT=0; bossRage=false; bossShake=0; bossDying=false; battleResolved=false;
   if(typeof setAuto==='function') setAuto(autoBattle);
   drawBattle(); renderInfo();
 }
@@ -3467,6 +3545,7 @@ function drawBattle(){
   const shakeSrc=hitEffects.find(h=>h.frame<3 && h.kind!=='heal');
   bctx.save();
   if(shakeSrc) bctx.translate((shakeSrc.frame%2?-1:1)*TILE*0.06, 0);
+  else if(bossShake>0){ bctx.translate((bossShake%2?-1:1)*TILE*0.10, 0); bossShake--; }
 
   // 床（水彩タッチの石床：石灰色と霧青緑の中間色）
   const stoneA=['#6e756c','#72776a','#697066','#737869'];
@@ -3595,6 +3674,39 @@ function drawBattle(){
       bctx.fillRect(bx,by,bw*Math.max(0,u.hp)/u.maxhp,2);
     }
   });
+
+  /* HPが半分を割ったら一度だけ咆哮させる。
+     数値の変化だけでは長い戦いに起伏がないので、区切りを目で分かるようにする。 */
+  const bossNow=units.find(u=>u.alive && BIG_BOSS_SPRITES.has(u.sprite));
+  if(bossNow && !bossRage && bossNow.hp<=bossNow.maxhp*0.5){
+    bossRage=true; bossShake=10;
+    elHead.textContent=`― ${bossNow.name}が咆哮を上げた ―`;
+    SFX.fire();
+  }
+
+  /* 巨躯のボスの背後や真横に回った駒は、絵の下に完全に隠れてしまう。
+     奥行きとしては正しい重なりだが、自分の駒が見えないのは操作の妨げになるので、
+     位置だけ分かる小さな印を上から重ねる。 */
+  const bigBoss=units.find(u=>u.alive && BIG_BOSS_SPRITES.has(u.sprite));
+  if(bigBoss){
+    const bs=TILE*BOSS_DRAW_SCALE;
+    const bx=BOFFX+bigBoss.x*TILE+TILE/2-bs/2;
+    const by=BOFFY+bigBoss.y*TILE+TILE-bs*FOOT_BOSS;
+    units.filter(u=>u.alive && u!==bigBoss && u.y<=bigBoss.y).forEach(u=>{
+      const px=BOFFX+u.x*TILE, py=BOFFY+u.y*TILE;
+      if(px+TILE<bx || px>bx+bs || py+TILE<by || py>by+bs) return;   // 重なっていない
+      const cx=px+TILE/2, cy=py+TILE/2;
+      bctx.save();
+      bctx.beginPath(); bctx.arc(cx,cy,TILE*0.26,0,Math.PI*2);
+      bctx.fillStyle='rgba(10,14,18,.85)'; bctx.fill();
+      bctx.lineWidth=2; bctx.strokeStyle=u.col||'#8fd8ff'; bctx.stroke();
+      bctx.fillStyle=u.col||'#8fd8ff';
+      bctx.font=`bold ${Math.round(TILE*0.34)}px "Shippori Mincho", serif`;
+      bctx.textAlign='center'; bctx.textBaseline='middle';
+      bctx.fillText(u.name[0], cx, cy+1);
+      bctx.restore();
+    });
+  }
 
   // キーボード操作中だけ、選択マスを示すカーソルを重ねる
   if(cursorVisible && phase==='player'){
@@ -3905,7 +4017,7 @@ function castSpell(target){
 function spellFx(gx,gy){
   const px=BOFFX+gx*TILE, py=BOFFY+gy*TILE, cx=px+TILE/2, cy=py+TILE/2;
   let frame=0;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     const r=TILE*(0.2+frame*0.12);
     bctx.save();
@@ -3916,18 +4028,25 @@ function spellFx(gx,gy){
     bctx.beginPath();bctx.arc(cx,cy,r,0,Math.PI*2);bctx.fill();
     bctx.restore();
     frame++;
-    if(frame>5){ clearInterval(iv); drawBattle(); }
+    if(frame>5){ fxClearInterval(iv); drawBattle(); }
   },45);
 }
 
 // 火炎の吐息：caster(gx0,gy0) → target(gx1,gy1) に向けて、扇状の炎が噴き出す
 // onImpact: 着弾時に呼ばれる、onEnd: エフェクト終了時に呼ばれる
+/* 演出が動いている間は、ボスの呼吸で盤を描き直さないための目印。
+   各 FX は「drawBattle してから効果を上に重ねる」作りなので、
+   その合間に割り込むと効果が1コマおきに消えて点滅する。 */
+const fxActive=new Set();
+function fxSetInterval(fn, ms){ const iv=setInterval(fn, ms); fxActive.add(iv); return iv; }
+function fxClearInterval(iv){ if(fxActive.delete(iv)) clearInterval(iv); }
+
 function breathFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
   // ドラゴンは大きいので口の位置を顔の高さに合わせる：上半身寄りの位置
   const x0=BOFFX+gx0*TILE+TILE/2;
   const y0=BOFFY+gy0*TILE-TILE*0.6;  // タイルの上、口元あたり
   const x1=BOFFX+gx1*TILE+TILE/2, y1=BOFFY+gy1*TILE+TILE/2;
-  const buildupFrames=4;   // 口元に光が集まる
+  const buildupFrames=9;   // 口元に光が集まる。着弾点を先に示して「来る」と分かるようにする
   const breathFrames=10;   // 噴き出して伸びる
   const burnFrames=8;      // 着弾して滞留・焼く
   const totalFrames=buildupFrames+breathFrames+burnFrames;
@@ -3938,7 +4057,7 @@ function breathFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
   const px=-ny, py=nx; // 垂直方向（扇の広がり）
   let frame=0;
   let impacted=false;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     bctx.save();
     if(frame<buildupFrames){
@@ -3952,6 +4071,14 @@ function breathFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
       g.addColorStop(1,'rgba(180,28,28,0)');
       bctx.fillStyle=g;
       bctx.beginPath(); bctx.arc(x0,y0,r,0,Math.PI*2); bctx.fill();
+      // 着弾点を先に示す。撃たれてから気づくのではなく、来ると分かるように
+      const mr=TILE*(0.30+0.16*Math.sin(t*Math.PI*3));
+      bctx.strokeStyle=`rgba(255,150,60,${0.35+t*0.5})`;
+      bctx.lineWidth=Math.max(2, TILE*0.06);
+      bctx.beginPath(); bctx.arc(x1,y1,mr,0,Math.PI*2); bctx.stroke();
+      bctx.strokeStyle=`rgba(255,226,150,${0.2+t*0.35})`;
+      bctx.lineWidth=1;
+      bctx.beginPath(); bctx.arc(x1,y1,mr*0.62,0,Math.PI*2); bctx.stroke();
     }else if(frame<buildupFrames+breathFrames){
       // 噴き出し：扇状の炎を、口元から対象までだんだん伸ばす
       const t=(frame-buildupFrames)/breathFrames;          // 0..1
@@ -4014,7 +4141,7 @@ function breathFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
     bctx.restore();
     frame++;
     if(frame>=totalFrames){
-      clearInterval(iv);
+      fxClearInterval(iv);
       drawBattle();
       if(onEnd) onEnd();
     }
@@ -4029,7 +4156,7 @@ function aoeFireFx(gx0, gy0, gcx, gcy, area, cells, onImpact, onEnd){
   const trail=[];
   let frame=0;
   let impacted=false;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     bctx.save();
     if(frame<flightFrames){
@@ -4086,7 +4213,7 @@ function aoeFireFx(gx0, gy0, gcx, gcy, area, cells, onImpact, onEnd){
     bctx.restore();
     frame++;
     if(frame>=flightFrames+burstFrames){
-      clearInterval(iv);
+      fxClearInterval(iv);
       drawBattle();
       if(onEnd) onEnd();
     }
@@ -4098,7 +4225,7 @@ function aoeHealFx(gcx, gcy, area, cells){
   const xc=BOFFX+gcx*TILE+TILE/2, yc=BOFFY+gcy*TILE+TILE/2;
   const totalFrames=10;
   let frame=0;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     bctx.save();
     const t=frame/totalFrames;
@@ -4133,7 +4260,7 @@ function aoeHealFx(gcx, gcy, area, cells){
     });
     bctx.restore();
     frame++;
-    if(frame>=totalFrames){ clearInterval(iv); drawBattle(); }
+    if(frame>=totalFrames){ fxClearInterval(iv); drawBattle(); }
   },45);
 }
 
@@ -4148,7 +4275,7 @@ function fireballFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
   const trail=[];           // 残像位置の履歴
   let frame=0;
   let impacted=false;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     bctx.save();
     if(frame<flightFrames){
@@ -4217,7 +4344,7 @@ function fireballFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
     bctx.restore();
     frame++;
     if(frame>=flightFrames+explodeFrames){
-      clearInterval(iv);
+      fxClearInterval(iv);
       drawBattle();
       if(onEnd) onEnd();
     }
@@ -4228,7 +4355,7 @@ function fireballFx(gx0, gy0, gx1, gy1, onImpact, onEnd){
 function healFx(gx,gy){
   const px=BOFFX+gx*TILE, py=BOFFY+gy*TILE, cx=px+TILE/2, cy=py+TILE/2;
   let frame=0;
-  const iv=setInterval(()=>{
+  const iv=fxSetInterval(()=>{
     drawBattle();
     bctx.save();
     const a=Math.max(0,0.65-frame*0.1);
@@ -4250,7 +4377,7 @@ function healFx(gx,gy){
     }
     bctx.restore();
     frame++;
-    if(frame>6){ clearInterval(iv); drawBattle(); }
+    if(frame>6){ fxClearInterval(iv); drawBattle(); }
   },45);
 }
 
@@ -4423,6 +4550,30 @@ function autoTick(){
   autoStep(u);
 }
 setInterval(autoTick, 220);
+
+/* ボスの呼吸を進めるループ。
+   FX の各関数は「drawBattle してから効果を上に描く」作りなので、
+   その最中に割り込むと効果が1コマ消えて点滅する。
+   自分のターンで盤を眺めている間だけ回せば、その心配がない。 */
+(function bossBreath(){
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let last=performance.now(), acc=0;
+  const STEP=1/30;   // 呼吸はゆっくりなので30コマ/秒で足りる。無駄に描かない
+  function tick(now){
+    const dt=Math.min(0.1,(now-last)/1000); last=now; acc+=dt;
+    if(acc<STEP){ requestAnimationFrame(tick); return; }
+    acc=0;
+    if(!reduce && phase==='player' && elBattleView && isViewOpen(elBattleView)
+       && fxActive.size===0                      // 演出中は触らない
+       && units.some(u=>u.alive && BIG_BOSS_SPRITES.has(u.sprite))
+       && getComputedStyle(elConfirm).display==='none'){
+      bossAnimT+=STEP;
+      drawBattle();
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
 
 if(elAuto) elAuto.onclick=()=>{
   setAuto(!autoBattle, autoBattle ? 'オートを解除した。' : 'オートで戦う。もう一度押すと解除。');
@@ -4923,15 +5074,119 @@ function enemyPhase(){
   setTimeout(step,420);
 }
 
+/* ===== ボスの消滅 =====
+   倒した瞬間に結果パネルを出すと、竜は「消えた」のではなく
+   「描かれなくなった」だけに見える。まず音楽を落として沈黙を作り、
+   盤だけを残してゆっくり崩れさせてから結果へ移る。 */
+let bossDying=false;
+
+function bossDeathFx(boss, onDone){
+  const img=SPRITE_IMG_OBJ[boss.sprite];
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  BGM.stop(0.9);                    // 沈黙がいちばん効く。まず音楽を落とす
+  if(!img || reduce){ setTimeout(()=>onDone&&onDone(), reduce?500:0); return; }
+
+  SFX.fall();
+  noise({dur:1.6, vol:0.16, hpf:60, lpf:900});                       // 崩れる唸り
+  tone({f:150, f2:42, dur:1.9, type:'sawtooth', vol:0.13, attack:0.06}); // ゆっくり沈む持続音
+
+  const size=TILE*BOSS_DRAW_SCALE;
+  const cx=BOFFX+boss.x*TILE+TILE/2;
+  const baseY=BOFFY+boss.y*TILE+TILE-size*FOOT_BOSS;
+  const rnd=mulberry32(0x5eed ^ (boss.x*31+boss.y));
+  // 砕けた粒。絵の範囲にばらまいて上へ流す
+  const motes=[];
+  for(let i=0;i<46;i++){
+    motes.push({ x:cx+(rnd()-0.5)*size*0.72,
+                 y:baseY+size*(0.18+rnd()*0.62),
+                 vy:-(18+rnd()*46), vx:(rnd()-0.5)*22,
+                 r:1.2+rnd()*2.6, t0:rnd()*0.35 });
+  }
+  const FLASH=320, FADE=1250, HOLD=650;   // 白熱 / 褪せて散る / 盤だけの静けさ
+  const total=FLASH+FADE+HOLD;
+  const t0=performance.now();
+  bossShake=8;
+
+  const iv=fxSetInterval(()=>{
+    const el=Math.min(total, performance.now()-t0);
+    drawBattle();                   // 竜はもう alive=false なので盤には出ない
+    bctx.save();
+    if(el<FLASH){
+      // とどめの白熱。まだ形は保っている
+      const t=el/FLASH;
+      bctx.drawImage(img, cx-size/2, baseY, size, size);
+      bctx.globalCompositeOperation='lighter';
+      bctx.globalAlpha=0.30+0.5*Math.sin(t*Math.PI);
+      bctx.drawImage(img, cx-size/2, baseY, size, size);
+    }else if(el<FLASH+FADE){
+      // 浮き上がりながら褪せ、光に散る
+      const t=(el-FLASH)/FADE;
+      const w=size*(1+t*0.10);
+      const x=cx-w/2, y=baseY-size*0.16*t-(w-size)/2;
+      bctx.globalAlpha=Math.max(0, 1-t*1.05);
+      bctx.drawImage(img, x, y, w, w);
+      bctx.globalCompositeOperation='lighter';
+      bctx.globalAlpha=Math.max(0, 0.55*(1-t)*(1-t));
+      bctx.drawImage(img, x, y, w, w);
+    }
+    bctx.restore();
+
+    // 粒は絵が消えたあともしばらく漂う
+    if(el>=FLASH*0.5){
+      const st=(el-FLASH*0.5)/1000;
+      bctx.save();
+      bctx.globalCompositeOperation='lighter';
+      motes.forEach(m=>{
+        const mt=st-m.t0;
+        if(mt<=0) return;
+        const a=Math.max(0, 1-mt/1.5);
+        if(a<=0) return;
+        const x=m.x+m.vx*mt+Math.sin(mt*3+m.t0*9)*5;
+        const y=m.y+m.vy*mt;
+        const g=bctx.createRadialGradient(x,y,0,x,y,m.r*3.2);
+        g.addColorStop(0,`rgba(255,226,168,${a*0.9})`);
+        g.addColorStop(1,'rgba(220,150,60,0)');
+        bctx.fillStyle=g;
+        bctx.beginPath(); bctx.arc(x,y,m.r*3.2,0,Math.PI*2); bctx.fill();
+      });
+      bctx.restore();
+    }
+
+    if(el>=total){
+      fxClearInterval(iv);
+      drawBattle();
+      onDone&&onDone();
+    }
+  }, 33);
+}
+
 function checkBattleEnd(){
   const alliesAlive=units.some(u=>u.side==='ally'&&u.alive);
   const foesAlive=units.some(u=>u.side==='foe'&&u.alive);
   renderInfo();
-  if(!foesAlive){ endBattle(true); }
+  if(bossDying) return;              // 消滅の演出中は結果を出さない
+  if(!foesAlive){
+    // 竜を倒したときだけ、消えるまでの間を挟む
+    const fallen=units.find(u=>!u.alive && BIG_BOSS_SPRITES.has(u.sprite));
+    if(fallen && !fallen._mourned){
+      fallen._mourned=true;
+      bossDying=true;
+      phase='done';                  // この間は誰も行動できない
+      bossDeathFx(fallen, ()=>{ bossDying=false; endBattle(true); });
+      return;
+    }
+    endBattle(true);
+  }
   else if(!alliesAlive){ endBattle(false); }
 }
 
+/* 結果を二度出すと、金も経験値も二重に入る。
+   通常はそうならない呼び出し順だが、間違えたときの被害が大きいので鍵をかけておく。 */
+let battleResolved=false;
+
 function endBattle(win){
+  if(battleResolved) return;
+  battleResolved=true;
   phase='done';
   // 戦闘結果をパーティHPへ反映
   party.forEach(p=>{
@@ -5101,6 +5356,17 @@ document.getElementById('overlayBtn').onclick=()=>{
     elExploreLog.textContent='戦いを終え、再び迷宮を進む。';
   }
   drawDungeon(); refreshHud();
+
+  /* 番人は階段の上に陣取っている。倒したあとはその階段の上に立っているので、
+     ここで問わないと、いったん降りてもう一度乗り直すまで先へ進めない。 */
+  if(!wasLose && !wasClear){
+    const f=FLOORS[floorIndex];
+    const mb=FLOOR_MIDBOSS[floorIndex];
+    if(f.stairsDown && player.x===f.stairsDown.x && player.y===f.stairsDown.y && (!mb || mb.defeated)){
+      elExploreLog.textContent='番人は倒れた。階段はもう塞がれていない。';
+      setTimeout(promptDescend, 280);   // 結果パネルが閉じてから問う
+    }
+  }
 };
 
 function renderInfo(){
@@ -5773,7 +6039,7 @@ function loadGame(slot){
     if(!raw) return false;
     const d=JSON.parse(raw);
     party = d.party.map(m=>({
-      name:m.name, cls:m.cls, sprite:m.sprite, level:m.level, exp:m.exp,
+      name:fixName(m.name), cls:m.cls, sprite:m.sprite, level:m.level, exp:m.exp,
       base:{...m.base}, spellBase: m.spellBase ? {...m.spellBase} : null,
       equip:{...m.equip}, hp:m.hp, mp:m.mp
     }));
