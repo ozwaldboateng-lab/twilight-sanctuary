@@ -1659,17 +1659,27 @@ function drawMinimap(){
 // 節目で自動的に記録する。教会だけが頼りだと、全滅の巻き戻しが大きすぎる
 function autoSave(){ try{ saveGame('auto'); }catch(e){} }
 
+/* 階層を移るときに必ず揃えるもの。
+   floorIndex を書き換えるだけの箇所が7つに散らばっていて、そのうち3つが
+   配色の適用を取りこぼしていた。とくに closeTown が抜けていたため、
+   天蓋（白）から町を経由して迷宮へ降りると、迷宮が白いままになっていた。
+   配色は WALL_BASE などの変数に焼き付ける作りなので、
+   階層を変えたのに適用し直さないと前の場所の色が残る。以後は必ずここを通す。 */
+function enterFloor(fi){
+  floorIndex=fi;
+  MAP=FLOORS[floorIndex].grid;
+  MW=MAP[0].length; MH=MAP.length;
+  applyFloorPalette();
+}
+
 function changeFloor(delta){
   const ni=floorIndex+delta;
   if(ni<0 || ni>=FLOORS.length) return;
-  floorIndex=ni;
-  MAP=FLOORS[floorIndex].grid;
-  MW=MAP[0].length; MH=MAP.length;
+  enterFloor(ni);
   // 到着位置：下りたら上り階段の上、上ったら下り階段の上
   const f=FLOORS[floorIndex];
   const arrive = delta>0 ? f.stairsUp : f.stairsDown;
   if(arrive){ player.x=arrive.x; player.y=arrive.y; }
-  applyFloorPalette();
   markVisited();
   autoSave();          // 階層をまたいだ時点を自動で記録
 }
@@ -1732,9 +1742,9 @@ const EQUIP={
      天使は器を配る側で、こちらは配られた側の獣。討つための得物という筋。
      noRandom を立てているのは、通常の epic 抽選に混ざると
      「番人から手に入れる」という道筋が崩れるため。 */
-  sword_beast:  {name:'獣の剣',   slot:'weapon', wclass:'戦士', rarity:'epic', mods:{atk:20}, angelSlay:2.5, noRandom:true, price:0},
-  staff_beast:  {name:'獣の杖',   slot:'weapon', wclass:'賢者', rarity:'epic', mods:{atk:20, spellPow:12}, angelSlay:2.5, noRandom:true, price:0},
-  rod_beast:    {name:'獣の錫杖', slot:'weapon', wclass:'僧侶', rarity:'epic', mods:{atk:20, spellPow:12}, angelSlay:2.5, noRandom:true, price:0},
+  sword_beast:  {name:'獣の剣',   slot:'weapon', wclass:'戦士', rarity:'epic', mods:{atk:25}, angelSlay:2.5, noRandom:true, price:0},
+  staff_beast:  {name:'獣の杖',   slot:'weapon', wclass:'賢者', rarity:'epic', mods:{atk:25, spellPow:25}, angelSlay:2.5, noRandom:true, price:0},
+  rod_beast:    {name:'獣の錫杖', slot:'weapon', wclass:'僧侶', rarity:'epic', mods:{atk:25, spellPow:25}, angelSlay:2.5, noRandom:true, price:0},
 
   robe_silksong: {name:'光絹のローブ',   slot:'armor', heavy:false, rarity:'epic', mods:{def:10, mov:1}, price:0},
   armor_scale:   {name:'竜鱗の鎧',       slot:'armor', heavy:true,  rarity:'epic', mods:{def:18}, price:0},
@@ -1967,6 +1977,11 @@ const KEY_ITEMS={
 
 // 動物・獣型の敵スプライト（狩人特効の対象）
 const BEAST_SPRITES = new Set(['bat','harpy','chimera','gargoyle','wolf','wyvern','basilisk','serpent']);
+/* 獣の三種の落ちやすさ（天蓋の住人1体につき、1本ごとの確率）。
+   1戦に3〜4体出るので、特定の1本が出るのは1戦あたり15〜19%、
+   だいたい5〜6戦に1本という見当。 */
+const BEAST_DROP={ sword_beast:0.05, staff_beast:0.05, rod_beast:0.05 };
+
 // 天使特効の対象。九天使すべて（雑魚も番人も主も）
 const ANGEL_SPRITES = new Set(['seraphim','cherubim','thrones','dominions','virtues',
                                'powers','principalities','archangels','angels']);
@@ -2726,8 +2741,7 @@ function move(forward){
       askConfirm(`光の渦が立ち昇っている。\n飛びますか？${labelText}`, ()=>{
         SFX.stairs();
         // フロア切替＆位置設定
-        floorIndex=link.floor;
-        MAP=FLOORS[floorIndex].grid; MW=MAP[0].length; MH=MAP.length;
+        enterFloor(link.floor);
         player.x=link.x; player.y=link.y;
         elExploreLog.textContent='光に包まれ、別の場所へ飛ばされた。';
         drawDungeon(); refreshHud();
@@ -3477,8 +3491,6 @@ const MIDBOSSES={
     // 輪だけの姿で歩かない。射程3から動かずに焼く
     spell:{name:'無数の眼', type:'damage', pow:17, radius:4, fx:'beam'},
     dropTable:{ rare:0.45, epic:0.50 },
-    // 天蓋の最初の番人。獣の三種をここで渡さないと、この先が通れない
-    fixedDrops:['sword_beast','staff_beast','rod_beast'],
   },
   cherubim: {
     name:'智天使', hp:215, maxhp:215, atk:16, def:10, mov:2, rng:2,
@@ -5662,11 +5674,14 @@ function endBattle(win){
         const drop = (foe.boss||foe.midboss) ? 'elixir' : 'herb';
         addItem(drop); got.push(drop);
       }
-      // 確定で渡す装備（未入手のものだけ）。抽選ではないので必ず手に入る
-      if(foe.fixedDrops){
-        foe.fixedDrops.forEach(k=>{
+      // 天蓋の住人が稀に落とす獣の三種。
+      // 通常のレアリティ抽選に載せると迷宮の epic 枠にも混ざってしまうので、
+      // 天蓋の敵（sky:true）だけを対象に、一本ずつ独立して判定する。
+      // すでに持っている武器は落とさない（同じものが増えても意味が無い）。
+      if(foe.sky){
+        Object.keys(BEAST_DROP).forEach(k=>{
           const have = inventory[k] || party.some(m=>m.equip.weapon===k || m.equip.armor===k);
-          if(!have){ addItem(k); got.push(k); }
+          if(!have && Math.random()<BEAST_DROP[k]){ addItem(k); got.push(k); }
         });
       }
       // キーアイテム抽選（中ボス等が固有で持つ）
@@ -5761,7 +5776,7 @@ document.getElementById('overlayBtn').onclick=()=>{
       party=freshParty();
       inventory={};
       gold=0;
-      floorIndex=0; MAP=FLOORS[0].grid; MW=MAP[0].length; MH=MAP.length;
+      enterFloor(0);
       FLOORS.forEach(f=>{ f.visited=f.grid.map(row=>row.map(()=>false)); });
       FLOOR_MIDBOSS.forEach(mb=>{ if(mb) mb.defeated=false; });
       player.x=1; player.y=1; player.dir=1;
@@ -5986,8 +6001,7 @@ function closeTown(){
   // 迷宮へ戻る：B1の開始地点に戻す（上り階段マスに立った状態だと無限ループになるので、隣のマスへ）
   hideView(elTownView);
   showView(elExploreView);
-  floorIndex=0;
-  MAP=FLOORS[0].grid; MW=MAP[0].length; MH=MAP.length;
+  enterFloor(0);
   // 上り階段の隣、(2,1)あたりに戻す（通路なので確実）
   player.x=2; player.y=1; player.dir=1; // 東向き
   drawDungeon(); refreshHud();
@@ -6415,12 +6429,10 @@ function enterSky(){
   BGM.play('dungeon');
   hideView(elTownView);
   showView(elExploreView);
-  floorIndex=SKY_START;
-  MAP=FLOORS[floorIndex].grid; MW=MAP[0].length; MH=MAP.length;
+  enterFloor(SKY_START);
   const up=FLOORS[floorIndex].stairsUp;
   // 入り口のマスに立たせると、一歩目で「町へ戻りますか」を聞かれてしまう
   player.x=up.x+1; player.y=up.y; player.dir=1;
-  applyFloorPalette();
   markVisited();
   drawDungeon(); refreshHud();
   elExploreLog.textContent='白い光の中に踏み込んだ。足音が、返ってこない。';
@@ -6501,9 +6513,7 @@ function loadGame(slot){
     }));
     inventory={...d.inventory};
     gold=d.gold||0;
-    floorIndex=d.floorIndex||0;
-    MAP=FLOORS[floorIndex].grid; MW=MAP[0].length; MH=MAP.length;
-    applyFloorPalette();
+    enterFloor(d.floorIndex||0);
     player.x=d.player.x; player.y=d.player.y; player.dir=d.player.dir; player.steps=d.player.steps||0;
     bossDefeated=!!d.bossDefeated;
     loop=d.loop||1;
@@ -6574,8 +6584,7 @@ function startNewGame(){
   party=freshParty();
   inventory={};
   gold=0;
-  floorIndex=0; MAP=FLOORS[0].grid; MW=MAP[0].length; MH=MAP.length;
-  applyFloorPalette();
+  enterFloor(0);
   player.x=1; player.y=1; player.dir=1; player.steps=0;
   bossDefeated=false;
   loop=1;
